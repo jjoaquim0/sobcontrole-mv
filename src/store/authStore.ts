@@ -108,9 +108,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           cnpj,
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (compErr) throw compErr;
+      if (!dbCompany) {
+        throw new Error('Erro ao salvar os dados da empresa. Verifique se o RLS (Row Level Security) está desativado no seu Supabase.');
+      }
 
       // 3. Criar o Perfil do usuário com a role 'manager'
       const { data: dbProfile, error: profErr } = await supabase
@@ -123,9 +126,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           company_id: newCompanyId,
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (profErr) throw profErr;
+      if (!dbProfile) {
+        throw new Error('Erro ao criar o perfil do usuário. Verifique se o RLS (Row Level Security) está desativado no seu Supabase.');
+      }
 
       // 4. Criar Assinatura Inicial (Trial Pro de 14 dias)
       const { data: dbSub, error: subErr } = await supabase
@@ -140,9 +146,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           usage_current: 0,
         })
         .select()
-        .single();
+        .maybeSingle();
 
       if (subErr) throw subErr;
+      if (!dbSub) {
+        throw new Error('Erro ao criar a assinatura da empresa. Verifique se o RLS (Row Level Security) está desativado no seu Supabase.');
+      }
 
       set({
         user: data.user,
@@ -200,9 +209,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         .from('profiles')
         .select('*')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
       if (profErr) throw profErr;
+      if (!dbProfile) {
+        throw new Error('Perfil de usuário não encontrado. Certifique-se de que o cadastro da empresa foi concluído.');
+      }
 
       const profile = mapProfile(dbProfile);
       set({ profile });
@@ -212,9 +224,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         .from('companies')
         .select('*')
         .eq('id', profile.companyId)
-        .single();
+        .maybeSingle();
 
       if (compErr) throw compErr;
+      if (!dbCompany) {
+        throw new Error('Empresa do usuário não encontrada no banco de dados.');
+      }
+      
       const company = mapCompany(dbCompany);
       set({ company });
 
@@ -223,9 +239,13 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         .from('subscriptions')
         .select('*')
         .eq('company_id', company.id)
-        .single();
+        .maybeSingle();
 
       if (subErr) throw subErr;
+      if (!dbSub) {
+        throw new Error('Assinatura da empresa não encontrada no banco de dados.');
+      }
+      
       set({ subscription: mapSubscription(dbSub) });
 
     } catch (err: any) {

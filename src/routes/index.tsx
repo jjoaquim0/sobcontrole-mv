@@ -15,7 +15,7 @@ import { Sales, SaleDetailPage } from '../pages/sales';
 import { Inventory, ProductDetailPage } from '../pages/inventory';
 import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers } from '../pages/suppliers';
-import { Purchases } from '../pages/purchases';
+import { Purchases, PurchaseDetailPage } from '../pages/purchases';
 import { Financial } from '../pages/financial';
 import { Reports } from '../pages/reports';
 import { Documents } from '../pages/documents';
@@ -102,6 +102,14 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={['admin', 'manager']}>
             <Purchases />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'purchases/:id',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <PurchaseDetailPage />
           </RoleRoute>
         ),
       },

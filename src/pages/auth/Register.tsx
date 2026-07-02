@@ -83,8 +83,13 @@ export const Register: React.FC = () => {
   const onSubmit = async (data: RegisterFields) => {
     // Limpar o CNPJ antes de mandar pro back
     const cleanCnpj = data.cnpj.replace(/\D/g, '');
-    await signUp(data.email, data.password, data.name, data.companyName, cleanCnpj);
-    toast.success('Empresa e conta criadas com sucesso!');
+    const result = await signUp(data.email, data.password, data.name, data.companyName, cleanCnpj);
+    if (result?.needsEmailConfirmation) {
+      toast.success('Confira seu e-mail para confirmar o cadastro e concluir a criação da sua empresa.');
+      navigate('/login', { replace: true });
+    } else {
+      toast.success('Empresa e conta criadas com sucesso!');
+    }
   };
 
   return (

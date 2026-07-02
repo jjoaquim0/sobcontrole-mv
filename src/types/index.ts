@@ -128,10 +128,25 @@ export interface Purchase {
   supplierId: string;
   supplier?: Supplier;
   totalAmount: number;
+  discount: number;
+  fee: number;
+  finalValue: number;
   status: PurchaseStatus;
   paymentMethod: PaymentMethod;
+  notes?: string;
   createdAt: string;
   createdBy: string; // ID do Profile
+  createdByName?: string;
+}
+
+export interface PurchaseItem {
+  id: string;
+  purchaseId: string;
+  productId: string;
+  product?: Product;
+  quantity: number;
+  unitCost: number;
+  subtotal: number;
 }
 
 export interface AccountReceivable {

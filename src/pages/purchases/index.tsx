@@ -1,7 +1,3 @@
-import React from 'react';
-import { UnderConstruction } from '../UnderConstruction';
-
-export const Purchases: React.FC = () => {
-  return <UnderConstruction title="Compras" />;
-};
-export default Purchases;
+export { PurchasesPage as Purchases } from './PurchasesPage';
+export { PurchaseDetailPage } from './PurchaseDetailPage';
+export { PurchasesPage as default } from './PurchasesPage';

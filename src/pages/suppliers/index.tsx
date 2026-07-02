@@ -1,7 +1,2 @@
-import React from 'react';
-import { UnderConstruction } from '../UnderConstruction';
-
-export const Suppliers: React.FC = () => {
-  return <UnderConstruction title="Fornecedores" />;
-};
-export default Suppliers;
+export { SuppliersPage as Suppliers } from './SuppliersPage';
+export { SuppliersPage as default } from './SuppliersPage';

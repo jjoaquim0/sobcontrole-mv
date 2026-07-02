@@ -20,6 +20,11 @@ export interface CustomerStats {
   newCustomersThisMonth: number;
 }
 
+export interface PurchaseDashboardStats {
+  totalPurchasesThisMonth: number;
+  totalSpentThisMonth: number;
+}
+
 export interface FinancialSummary {
   toReceive: number;
   toPay: number;
@@ -167,6 +172,33 @@ export const getCustomerStats = async (): Promise<CustomerStats> => {
 };
 
 /**
+ * Retorna as estatísticas de compras do mês atual para uso no dashboard.
+ */
+export const getPurchaseStats = async (): Promise<PurchaseDashboardStats> => {
+  const companyId = useAuthStore.getState().company?.id;
+  if (!companyId) throw new Error('Empresa não identificada.');
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const { data, error } = await supabase
+    .from('purchases')
+    .select('final_value, status, created_at')
+    .eq('company_id', companyId)
+    .gte('created_at', startOfMonth);
+
+  if (error) throw error;
+
+  const totalPurchasesThisMonth = data?.length || 0;
+  const totalSpentThisMonth = data?.filter((p) => p.status === 'paid').reduce((sum, p) => sum + Number(p.final_value), 0) || 0;
+
+  return {
+    totalPurchasesThisMonth,
+    totalSpentThisMonth,
+  };
+};
+
+/**
  * Retorna o resumo financeiro com contas a pagar/receber e montantes vencidos.
  */
 export const getFinancialSummary = async (): Promise<FinancialSummary> => {
@@ -219,6 +251,15 @@ export const getRecentActivity = async (limit: number = 5): Promise<RecentActivi
 
   if (salesErr) throw salesErr;
 
+  const { data: purchases, error: purchErr } = await supabase
+    .from('purchases')
+    .select('id, final_value, status, created_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (purchErr) throw purchErr;
+
   const { data: payables, error: payErr } = await supabase
     .from('account_payables')
     .select('id, amount, status, due_date, description')
@@ -248,6 +289,17 @@ export const getRecentActivity = async (limit: number = 5): Promise<RecentActivi
       value: Number(s.final_value),
       status: statusMap as any,
       date: s.created_at,
+    });
+  });
+
+  purchases?.forEach((p) => {
+    activities.push({
+      id: p.id,
+      description: `Compra registrada - #${p.id}`,
+      type: 'sale',
+      value: Number(p.final_value),
+      status: p.status as any,
+      date: p.created_at,
     });
   });
 

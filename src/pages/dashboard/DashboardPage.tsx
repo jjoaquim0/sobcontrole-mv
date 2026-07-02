@@ -18,7 +18,8 @@ import {
   BarChart3,
   Download,
   Eye,
-  ArrowRight
+  ArrowRight,
+  ShoppingBag
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { toast } from 'sonner';
@@ -35,6 +36,7 @@ export const DashboardPage: React.FC = () => {
     weeklySales,
     topProducts,
     financialHealth,
+    purchases,
   } = useDashboard();
 
   // Formatador de Moeda R$
@@ -469,6 +471,31 @@ export const DashboardPage: React.FC = () => {
             value={formatCurrency(financial.data?.overduePay)}
             accentColor="red"
             icon={<AlertCircle className="w-5 h-5" />}
+          />
+        )}
+      </div>
+
+      {/* Linha 4 — Resumo de Compras */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {purchases.isLoading ? (
+          <div className="h-24 bg-white dark:bg-[#1a1d27] rounded-2xl border border-gray-100 dark:border-white/5 animate-pulse" />
+        ) : (
+          <StatCard
+            title="Compras do Mês"
+            value={purchases.data?.totalPurchasesThisMonth ?? 0}
+            accentColor="blue"
+            icon={<ShoppingBag className="w-5 h-5" />}
+          />
+        )}
+
+        {purchases.isLoading ? (
+          <div className="h-24 bg-white dark:bg-[#1a1d27] rounded-2xl border border-gray-100 dark:border-white/5 animate-pulse" />
+        ) : (
+          <StatCard
+            title="Gasto com Compras no Mês"
+            value={formatCurrency(purchases.data?.totalSpentThisMonth)}
+            accentColor="yellow"
+            icon={<DollarSign className="w-5 h-5" />}
           />
         )}
       </div>

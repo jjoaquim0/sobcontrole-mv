@@ -8,6 +8,7 @@ import {
   getWeeklySales,
   getTopProducts,
   getFinancialHealth,
+  getPurchaseStats,
 } from '../services/dashboardService';
 
 export const useDashboard = () => {
@@ -64,6 +65,12 @@ export const useDashboard = () => {
     ...queryOptions,
   });
 
+  const purchaseStats = useQuery({
+    queryKey: ['dashboard', 'purchaseStats'],
+    queryFn: getPurchaseStats,
+    ...queryOptions,
+  });
+
   return {
     sales: {
       data: salesStats.data,
@@ -112,6 +119,12 @@ export const useDashboard = () => {
       isLoading: financialHealth.isLoading,
       isError: financialHealth.isError,
       refetch: financialHealth.refetch,
+    },
+    purchases: {
+      data: purchaseStats.data,
+      isLoading: purchaseStats.isLoading,
+      isError: purchaseStats.isError,
+      refetch: purchaseStats.refetch,
     },
   };
 };

@@ -78,6 +78,44 @@ CREATE TABLE IF NOT EXISTS customers (
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
+-- Tabela: Fornecedores (Suppliers)
+CREATE TABLE IF NOT EXISTS suppliers (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    email TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    document TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Tabela: Compras (Purchases)
+CREATE TABLE IF NOT EXISTS purchases (
+    id TEXT PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    supplier_id UUID REFERENCES suppliers(id) ON DELETE RESTRICT NOT NULL,
+    total_amount NUMERIC(12, 2) DEFAULT 0.00 NOT NULL,
+    discount NUMERIC(12, 2) DEFAULT 0.00 NOT NULL,
+    fee NUMERIC(12, 2) DEFAULT 0.00 NOT NULL,
+    final_value NUMERIC(12, 2) DEFAULT 0.00 NOT NULL,
+    status TEXT NOT NULL, -- 'paid', 'pending', 'canceled'
+    payment_method TEXT NOT NULL,
+    notes TEXT DEFAULT '',
+    created_by UUID REFERENCES profiles(id) ON DELETE RESTRICT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Tabela: Itens da Compra (Purchase Items)
+CREATE TABLE IF NOT EXISTS purchase_items (
+    id TEXT PRIMARY KEY,
+    purchase_id TEXT REFERENCES purchases(id) ON DELETE CASCADE NOT NULL,
+    product_id UUID REFERENCES products(id) ON DELETE RESTRICT NOT NULL,
+    quantity NUMERIC(12, 3) DEFAULT 0.000 NOT NULL,
+    unit_cost NUMERIC(12, 2) DEFAULT 0.00 NOT NULL,
+    subtotal NUMERIC(12, 2) DEFAULT 0.00 NOT NULL
+);
+
 -- Tabela: Vendas (Sales)
 CREATE TABLE IF NOT EXISTS sales (
     id TEXT PRIMARY KEY,
@@ -129,7 +167,6 @@ CREATE TABLE IF NOT EXISTS account_payables (
 -- =========================================================================
 -- 2. HABILITAR SECURITY & RLS (Row Level Security)
 -- =========================================================================
--- Opcional, mas altamente recomendado no ambiente Supabase real.
 
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
@@ -137,15 +174,210 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE suppliers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE purchase_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sale_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_receivables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_payables ENABLE ROW LEVEL SECURITY;
 
--- Exemplo simples de Políticas (Bypass para desenvolvimento ou Políticas de RLS Multi-tenant)
--- NOTA: Como as consultas usam sempre o `company_id` retornado da sessão do perfil logado,
--- as políticas reais do Supabase normalmente filtram com base no `company_id` do perfil do usuário logado.
+-- =========================================================================
+-- 3. FUNÇÕES UTILITÁRIAS DE SEGURANÇA (SECURITY DEFINER)
+-- =========================================================================
+-- Estas funções rodam com privilégios do criador do banco (bypassing RLS),
+-- evitando recursão infinita nas políticas.
 
--- Criar funções utilitárias ou políticas simplificadas caso queira reforço no Supabase:
--- CREATE POLICY multi_tenant_policy ON categories FOR ALL TO authenticated
--- USING (company_id = (SELECT company_id FROM profiles WHERE id = auth.uid()));
+CREATE OR REPLACE FUNCTION public.get_user_company_id()
+RETURNS UUID AS $$
+  SELECT company_id FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public;
+
+CREATE OR REPLACE FUNCTION public.get_user_role()
+RETURNS TEXT AS $$
+  SELECT role FROM public.profiles WHERE id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER SET search_path = public;
+
+-- Estas duas funções são chamadas DIRETAMENTE dentro das políticas de RLS
+-- abaixo (companies/profiles/subscriptions/sale_items), que se aplicam a
+-- todos os roles, inclusive anon (o front-end faz um SELECT em `companies`
+-- como anon só para checar conectividade antes do login). EXECUTE precisa
+-- ficar liberado para anon/authenticated para essas políticas funcionarem;
+-- isso é seguro porque a função sempre retorna NULL quando auth.uid() é
+-- nulo, então nenhuma linha real é exposta.
+GRANT EXECUTE ON FUNCTION public.get_user_company_id() TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_user_role() TO anon, authenticated;
+
+-- Função atômica de cadastro: cria empresa + perfil + assinatura numa
+-- única transação. SECURITY DEFINER para poder inserir nas 3 tabelas, mas
+-- exige auth.uid() (usuário já autenticado, ou seja, e-mail confirmado) e
+-- sempre cria o profile para o próprio usuário chamador — nunca aceita
+-- company_id arbitrário vindo do cliente, o que impede um usuário de se
+-- vincular à empresa de outro (RLS "always true" antigo permitia isso).
+CREATE OR REPLACE FUNCTION public.complete_company_signup(
+  p_company_name TEXT,
+  p_cnpj TEXT,
+  p_user_name TEXT,
+  p_user_email TEXT
+)
+RETURNS TABLE (
+  company_id UUID,
+  company_name TEXT,
+  company_cnpj TEXT,
+  company_created_at TIMESTAMPTZ,
+  company_updated_at TIMESTAMPTZ,
+  profile_role TEXT,
+  subscription_id UUID,
+  subscription_plan TEXT,
+  subscription_status TEXT,
+  subscription_current_period_end TIMESTAMPTZ,
+  subscription_usage_limit INTEGER,
+  subscription_usage_current INTEGER,
+  subscription_created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid UUID := auth.uid();
+  v_company_id UUID;
+  v_subscription_id UUID;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Usuário não autenticado. Confirme seu e-mail e faça login antes de concluir o cadastro.';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE id = v_uid) THEN
+    RAISE EXCEPTION 'Este usuário já possui um cadastro concluído.';
+  END IF;
+
+  v_company_id := gen_random_uuid();
+  v_subscription_id := gen_random_uuid();
+
+  INSERT INTO public.companies (id, name, cnpj)
+  VALUES (v_company_id, p_company_name, p_cnpj);
+
+  INSERT INTO public.profiles (id, email, name, role, company_id)
+  VALUES (v_uid, p_user_email, p_user_name, 'manager', v_company_id);
+
+  INSERT INTO public.subscriptions (id, company_id, plan, status, current_period_end, usage_limit, usage_current)
+  VALUES (v_subscription_id, v_company_id, 'pro', 'active', now() + interval '14 days', 200, 0);
+
+  RETURN QUERY
+  SELECT c.id, c.name, c.cnpj, c.created_at, c.updated_at,
+         'manager'::TEXT,
+         s.id, s.plan, s.status, s.current_period_end, s.usage_limit, s.usage_current, s.created_at
+  FROM public.companies c
+  JOIN public.subscriptions s ON s.company_id = c.id
+  WHERE c.id = v_company_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.complete_company_signup(TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.complete_company_signup(TEXT, TEXT, TEXT, TEXT) FROM anon;
+GRANT EXECUTE ON FUNCTION public.complete_company_signup(TEXT, TEXT, TEXT, TEXT) TO authenticated;
+
+-- =========================================================================
+-- 4. POLÍTICAS DE RLS
+-- =========================================================================
+
+-- POLÍTICAS: Empresas (Companies)
+-- Nota: não existe política de INSERT direta. A criação de empresas só
+-- acontece através da função SECURITY DEFINER complete_company_signup(),
+-- que valida auth.uid() e nunca permite vincular um profile a uma empresa
+-- alheia. Isso evita que qualquer usuário (autenticado ou não) insira
+-- companies/profiles/subscriptions arbitrários via REST direto.
+
+CREATE POLICY "Usuários podem ver a própria empresa" ON companies
+FOR SELECT USING (
+  id = get_user_company_id()
+  OR
+  (auth.uid() IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid()))
+);
+
+CREATE POLICY "Usuários podem atualizar a própria empresa" ON companies
+FOR UPDATE USING (id = get_user_company_id());
+
+-- POLÍTICAS: Perfis (Profiles)
+CREATE POLICY "Usuários podem ver perfis da mesma empresa" ON profiles
+FOR SELECT USING (company_id = get_user_company_id() OR id = auth.uid());
+
+CREATE POLICY "Usuários podem atualizar próprio perfil ou gestores da empresa" ON profiles
+FOR UPDATE USING (
+  id = auth.uid()
+  OR
+  (company_id = get_user_company_id() AND get_user_role() IN ('admin', 'manager'))
+);
+
+-- POLÍTICAS: Assinaturas (Subscriptions)
+CREATE POLICY "Usuários podem ver assinatura da empresa" ON subscriptions
+FOR SELECT USING (company_id = get_user_company_id());
+
+CREATE POLICY "Gestores podem atualizar assinatura da empresa" ON subscriptions 
+FOR UPDATE USING (company_id = get_user_company_id() AND get_user_role() IN ('admin', 'manager'));
+
+-- POLÍTICAS COMPARTILHADAS (Multi-tenant): Acesso total baseado no company_id
+CREATE POLICY "Acesso total dos membros da empresa às categorias" ON categories
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa aos produtos" ON products
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa aos clientes" ON customers
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa aos fornecedores" ON suppliers
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa às compras" ON purchases
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total aos itens de compras da empresa" ON purchase_items
+FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.purchases
+    WHERE purchases.id = purchase_items.purchase_id
+      AND purchases.company_id = get_user_company_id()
+  )
+);
+
+CREATE POLICY "Acesso total dos membros da empresa às vendas" ON sales
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa às contas a receber" ON account_receivables
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa às contas a pagar" ON account_payables
+FOR ALL USING (company_id = get_user_company_id());
+
+-- POLÍTICAS: Itens de Vendas (Sale Items)
+CREATE POLICY "Acesso total aos itens de vendas da empresa" ON sale_items
+FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.sales
+    WHERE sales.id = sale_items.sale_id
+      AND sales.company_id = get_user_company_id()
+  )
+);
+
+-- =========================================================================
+-- 5. DEFESA EM PROFUNDIDADE: REMOVER ACESSO ANÔNIMO
+-- =========================================================================
+-- O app só acessa dados de negócio com o usuário já logado (role
+-- authenticated). O Supabase concede privilégios amplos ao role anon por
+-- padrão; removemos isso explicitamente para que o RLS não seja a única
+-- camada de proteção.
+REVOKE ALL ON companies, profiles, subscriptions, categories, products,
+  customers, suppliers, purchases, purchase_items, sales, sale_items,
+  account_receivables, account_payables
+FROM anon;
+
+-- Exceção: o front-end faz um SELECT em `companies` (e, por consequência
+-- da política de RLS, também precisa acessar `profiles`) como usuário
+-- anônimo apenas para checar conectividade antes de exibir a tela de
+-- login (ver src/main.tsx). O RLS de SELECT dessas tabelas exige
+-- auth.uid() IS NOT NULL, então nenhuma linha real é retornada para quem
+-- não está autenticado — só concedemos o privilégio de tentar a consulta.
+GRANT SELECT ON public.companies TO anon;
+GRANT SELECT ON public.profiles TO anon;

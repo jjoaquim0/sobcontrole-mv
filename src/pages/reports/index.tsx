@@ -1,7 +1,7 @@
 import React from 'react';
-import { UnderConstruction } from '../UnderConstruction';
+import { ReportsPage } from './ReportsPage';
 
 export const Reports: React.FC = () => {
-  return <UnderConstruction title="Relatórios e DRE" />;
+  return <ReportsPage />;
 };
 export default Reports;

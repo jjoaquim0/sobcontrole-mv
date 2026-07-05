@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getSuppliers,
+  getSupplierById,
   createSupplier,
   updateSupplier,
   toggleSupplierStatus,
@@ -74,5 +75,23 @@ export const useSuppliers = (filters?: Filters) => {
 
     toggleStatus: toggleStatusMutation.mutateAsync,
     isToggling: toggleStatusMutation.isPending,
+  };
+};
+
+/**
+ * Hook para carregar detalhes e histórico de compras agregado de um fornecedor
+ */
+export const useSupplierDetails = (id: string) => {
+  const detailsQuery = useQuery({
+    queryKey: ['supplier', id],
+    queryFn: () => getSupplierById(id),
+    enabled: !!id,
+  });
+
+  return {
+    data: detailsQuery.data,
+    isLoading: detailsQuery.isLoading,
+    isError: detailsQuery.isError,
+    refetch: detailsQuery.refetch,
   };
 };

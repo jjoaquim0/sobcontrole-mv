@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useProductDetails, useProductMutations } from '../../hooks/useInventory';
 import { ProductModal } from './components/ProductModal';
+import { StatCard } from '../../components/shared/StatCard';
 import { toast } from 'sonner';
 
 export const ProductDetailPage: React.FC = () => {

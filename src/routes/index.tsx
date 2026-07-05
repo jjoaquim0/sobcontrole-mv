@@ -14,7 +14,7 @@ import { Dashboard } from '../pages/dashboard';
 import { Sales, SaleDetailPage } from '../pages/sales';
 import { Inventory, ProductDetailPage } from '../pages/inventory';
 import { Customers, CustomerDetailPage } from '../pages/customers';
-import { Suppliers } from '../pages/suppliers';
+import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
 import { Purchases, PurchaseDetailPage } from '../pages/purchases';
 import { Financial } from '../pages/financial';
 import { Reports } from '../pages/reports';
@@ -96,6 +96,10 @@ export const router = createBrowserRouter([
       {
         path: 'suppliers',
         element: <Suppliers />,
+      },
+      {
+        path: 'suppliers/:id',
+        element: <SupplierDetailPage />,
       },
       {
         path: 'purchases',

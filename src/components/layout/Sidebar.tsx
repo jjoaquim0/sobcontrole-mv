@@ -2,22 +2,22 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { UserRole } from '../../types';
-import { 
-  LayoutDashboard, 
-  ShoppingBag, 
-  Users, 
-  Package, 
-  Truck, 
-  ShoppingCart, 
-  CreditCard, 
-  BarChart3, 
-  FileText, 
-  Building2, 
-  Settings, 
-  Shield, 
-  ChevronLeft, 
+import { LogoMark } from '../shared/brand';
+import {
+  LayoutDashboard,
+  ShoppingBag,
+  Users,
+  Package,
+  Truck,
+  ShoppingCart,
+  CreditCard,
+  BarChart3,
+  FileText,
+  Building2,
+  Settings,
+  Shield,
+  ChevronLeft,
   ChevronRight,
-  TrendingUp,
   Sparkles
 } from 'lucide-react';
 
@@ -82,37 +82,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
   return (
     <aside
-      className={`h-screen bg-[#1a1d27] text-white/70 flex flex-col justify-between border-r border-white/10 z-40 transition-all duration-300 relative ${
+      className={`relative h-screen flex flex-col justify-between z-20 shrink-0 transition-all duration-300 ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
+      <div className="panel-glass absolute inset-0 border-r border-black/5 dark:border-white/10" />
+
       {/* Header / Logo */}
-      <div className="p-5 flex items-center justify-between border-b border-white/10 h-16">
+      <div className="relative p-5 flex items-center justify-between border-b border-black/5 dark:border-white/10 h-16 shrink-0">
         {!isCollapsed && (
-          <div className="flex items-center gap-2">
-            <div className="bg-[#10b981] p-1.5 rounded-lg text-white">
-              <TrendingUp className="w-5 h-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-[#0B2551] to-[#00d2ff] flex items-center justify-center text-white p-2 shadow-lg shadow-[#00d2ff]/10">
+              <LogoMark className="w-full h-full" />
             </div>
-            <span className="font-bold text-lg text-white tracking-wider">Gestly</span>
+            <span className="font-bold text-lg text-gray-900 dark:text-white tracking-wide">Gestly</span>
           </div>
         )}
         {isCollapsed && (
-          <div className="bg-[#10b981] p-1.5 rounded-lg text-white mx-auto">
-            <TrendingUp className="w-5 h-5" />
+          <div className="w-9 h-9 mx-auto rounded-xl bg-gradient-to-br from-[#0B2551] to-[#00d2ff] flex items-center justify-center text-white p-2 shadow-lg shadow-[#00d2ff]/10">
+            <LogoMark className="w-full h-full" />
           </div>
         )}
 
         {/* Collapse button floating on border */}
         <button
           onClick={onToggle}
-          className="absolute -right-3 top-4 bg-[#10b981] hover:bg-[#059669] text-white rounded-full p-1 border border-[#1a1d27] shadow-lg transition-transform duration-200"
+          className="absolute -right-3 top-4 bg-gradient-to-br from-[#0B2551] to-[#00d2ff] hover:brightness-110 text-white rounded-full p-1 border-2 border-[#f8fafc] dark:border-[#0a0b0e] shadow-lg transition-all duration-200"
         >
           {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
       </div>
 
       {/* Navigation Links */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-6">
+      <div className="relative flex-1 overflow-y-auto px-3 py-4 space-y-6">
         {menuSections.map((section, idx) => {
           // Filtrar itens visíveis para o papel (role) do usuário
           const visibleItems = section.items.filter(
@@ -124,27 +126,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           return (
             <div key={idx} className="space-y-1">
               {!isCollapsed && (
-                <h4 className="px-3 mb-2 text-xs font-semibold uppercase tracking-widest text-white/30">
+                <h4 className="px-3 mb-2 text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-white/30">
                   {section.title}
                 </h4>
               )}
-              {isCollapsed && <div className="border-t border-white/5 my-2" />}
-              
+              {isCollapsed && <div className="border-t border-black/5 dark:border-white/5 my-2" />}
+
               <div className="space-y-1">
                 {visibleItems.map((item) => (
                   <NavLink
                     key={item.path}
                     to={item.path}
                     className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group ${
+                      `flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group rounded-xl ${
                         isActive
-                          ? 'bg-white/10 text-white rounded-xl'
-                          : 'hover:bg-white/5 text-white/70 hover:text-white rounded-xl'
+                          ? 'bg-gradient-to-r from-[#0B2551] to-[#00a8d8] text-white shadow-md shadow-[#00d2ff]/10'
+                          : 'hover:bg-black/[0.03] dark:hover:bg-white/5 text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white'
                       }`
                     }
                   >
-                    <item.icon className="w-5 h-5 shrink-0 text-white/60 group-hover:text-white transition-colors duration-200" />
-                    {!isCollapsed && <span>{item.name}</span>}
+                    {({ isActive }) => (
+                      <>
+                        <item.icon
+                          className={`w-5 h-5 shrink-0 transition-colors duration-200 ${
+                            isActive ? 'text-white' : 'text-gray-400 dark:text-white/60 group-hover:text-gray-900 dark:group-hover:text-white'
+                          }`}
+                        />
+                        {!isCollapsed && <span>{item.name}</span>}
+                      </>
+                    )}
                   </NavLink>
                 ))}
               </div>
@@ -154,31 +164,31 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       </div>
 
       {/* Footer / Subscription Usage */}
-      <div className="p-4 border-t border-white/10 bg-black/15">
+      <div className="relative p-4 border-t border-black/5 dark:border-white/10 shrink-0">
         {!isCollapsed ? (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-white uppercase tracking-wider">
+              <span className="font-semibold text-gray-900 dark:text-white uppercase tracking-wider">
                 Plano {subscription?.plan || 'Free'}
               </span>
-              <span className="text-white/50">{usagePercent}%</span>
+              <span className="text-gray-400 dark:text-white/50">{usagePercent}%</span>
             </div>
-            
-            <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+
+            <div className="w-full bg-black/5 dark:bg-white/10 rounded-full h-1.5 overflow-hidden">
               <div
-                className="bg-[#10b981] h-1.5 rounded-full transition-all duration-500"
+                className="bg-gradient-to-r from-[#0B2551] to-[#00d2ff] h-1.5 rounded-full transition-all duration-500"
                 style={{ width: `${usagePercent}%` }}
               />
             </div>
-            
-            <p className="text-[10px] text-white/40 text-center">
+
+            <p className="text-[10px] text-gray-400 dark:text-white/40 text-center">
               {subscription?.usageCurrent ?? 0} / {subscription?.usageLimit ?? 100} Operações
             </p>
 
             {subscription?.plan !== 'enterprise' && (
               <button
                 type="button"
-                className="w-full bg-[#10b981] hover:bg-[#059669] text-white text-xs font-semibold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-colors duration-200 shadow-md"
+                className="w-full bg-gradient-to-r from-[#0B2551] to-[#00d2ff] hover:brightness-110 text-white text-xs font-semibold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-200 shadow-md"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Upgrade
@@ -187,8 +197,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <span className="text-[10px] uppercase font-bold text-[#10b981]">{subscription?.plan[0] || 'F'}</span>
-            <div className="w-2 h-2 rounded-full bg-[#10b981]" title={`${usagePercent}% de uso`} />
+            <span className="text-[10px] uppercase font-bold text-[#00a8d8]">{subscription?.plan[0] || 'F'}</span>
+            <div className="w-2 h-2 rounded-full bg-gradient-to-br from-[#0B2551] to-[#00d2ff]" title={`${usagePercent}% de uso`} />
           </div>
         )}
       </div>

@@ -10,6 +10,8 @@ export type PurchaseStatus = 'paid' | 'pending' | 'canceled';
 
 export type TransactionStatus = 'paid' | 'pending' | 'late' | 'canceled';
 
+export type FinancialCategoryType = 'revenue' | 'expense';
+
 export type DocumentStatus = 'active' | 'archived';
 
 export type CustomerType = 'individual' | 'corporate'; // pf ou pj
@@ -20,6 +22,22 @@ export interface Company {
   id: string;
   name: string;
   cnpj: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanySettings {
+  id: string;
+  companyId: string;
+  timezone: string;
+  currency: string;
+  language: string;
+  dateFormat: string;
+  logoUrl: string;
+  primaryColor: string;
+  emailNotifications: boolean;
+  pushNotifications: boolean;
+  whatsappNotifications: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -74,6 +92,16 @@ export interface Category {
   name: string;
   description?: string;
   createdAt: string;
+}
+
+export interface FinancialCategory {
+  id: string;
+  companyId: string;
+  name: string;
+  type: FinancialCategoryType;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Product {
@@ -179,13 +207,29 @@ export interface AccountPayable {
   description?: string;
 }
 
+export interface ReportPeriod {
+  type: '7d' | '30d' | '90d' | '12m' | 'custom';
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export interface Document {
   id: string;
   companyId: string;
   name: string;
+  originalName: string;
   url: string;
-  category: string;
+  category: DocumentCategory;
+  mimeType: string;
   size: number; // em bytes
+  storagePath: string;
+  relatedType?: 'sale' | 'purchase' | 'customer' | 'supplier';
+  relatedId?: string;
   status: DocumentStatus;
+  uploadedBy?: string;
+  uploadedByName?: string;
   createdAt: string;
+  updatedAt: string;
 }
+
+export type DocumentCategory = 'nota_fiscal' | 'contrato' | 'boleto' | 'recibo' | 'empresa' | 'cliente' | 'fornecedor' | 'outros';

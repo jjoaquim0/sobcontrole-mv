@@ -37,16 +37,16 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="bg-white dark:bg-[#1a1d27] border-b border-gray-100 dark:border-white/5 h-16 px-6 flex items-center justify-between shadow-sm shrink-0 transition-colors duration-300">
+    <header className="panel-glass border-b border-black/5 dark:border-white/10 h-16 px-6 flex items-center justify-between shrink-0 transition-colors duration-300">
       {/* Left: Company details */}
-      <div className="flex items-center gap-3">
+      <div className="relative flex items-center gap-3">
         {company ? (
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-gray-800 dark:text-gray-200">
+            <span className="font-semibold text-gray-800 dark:text-gray-100">
               {company.name}
             </span>
             {subscription && (
-              <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-[#10b981] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+              <span className="text-[10px] bg-gradient-to-r from-[#0B2551] to-[#00d2ff] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
                 {subscription.plan}
               </span>
             )}
@@ -57,11 +57,11 @@ export const Header: React.FC = () => {
       </div>
 
       {/* Right: Actions and User details */}
-      <div className="flex items-center gap-4">
+      <div className="relative flex items-center gap-4">
         {/* Notifications */}
         <button
           type="button"
-          className="p-2 rounded-xl text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all duration-200"
+          className="p-2 rounded-xl text-gray-500 hover:text-[#00a8d8] dark:text-gray-400 dark:hover:text-[#00d2ff] hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200"
           title="Notificações"
         >
           <Bell className="w-5 h-5" />
@@ -71,20 +71,20 @@ export const Header: React.FC = () => {
         <button
           type="button"
           onClick={toggleTheme}
-          className="p-2 rounded-xl text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/5 transition-all duration-200"
+          className="p-2 rounded-xl text-gray-500 hover:text-[#00a8d8] dark:text-gray-400 dark:hover:text-[#00d2ff] hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200"
           title={theme === 'light' ? 'Modo Escuro' : 'Modo Claro'}
         >
           {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
         </button>
 
         {/* Separator */}
-        <div className="h-6 w-px bg-gray-100 dark:bg-white/10" />
+        <div className="h-6 w-px bg-black/5 dark:bg-white/10" />
 
         {/* User profile */}
         {profile && (
           <div className="flex items-center gap-3">
             {/* Avatar */}
-            <div className="w-9 h-9 rounded-full bg-[#10b981] text-white flex items-center justify-center text-sm font-semibold tracking-wider shadow-sm">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#0B2551] to-[#00d2ff] text-white flex items-center justify-center text-sm font-semibold tracking-wider shadow-sm shadow-[#00d2ff]/20">
               {profile.name ? getInitials(profile.name) : <UserIcon className="w-4 h-4" />}
             </div>
 

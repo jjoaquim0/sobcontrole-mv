@@ -114,3 +114,127 @@ export const toggleSupplierStatus = async (
   if (error) throw error;
   return mapDbSupplier(dbSupplier);
 };
+
+export interface SupplierDetail {
+  supplier: Supplier;
+  metrics: {
+    totalPurchasesCount: number;
+    totalSpent: number;
+    averageTicket: number;
+    lastPurchaseDate: string | null;
+    preferredPaymentMethod: string;
+  };
+  purchaseHistory: {
+    id: string;
+    createdAt: string;
+    products: string;
+    totalAmount: number;
+    status: 'paid' | 'pending' | 'canceled';
+  }[];
+}
+
+const getPreferredPurchaseMethod = (purchases: any[]): string => {
+  const paymentMethods = purchases.map((p) => p.payment_method).filter(Boolean);
+  if (paymentMethods.length === 0) return 'Nenhum';
+  const countMap: Record<string, number> = {};
+  let preferred = 'Nenhum';
+  let maxCount = 0;
+
+  const translations: Record<string, string> = {
+    money: 'Dinheiro',
+    cash: 'Dinheiro',
+    credit_card: 'Cartão de Crédito',
+    debit_card: 'Cartão de Débito',
+    pix: 'Pix',
+    bank_slip: 'Boleto Bancário',
+    bank_transfer: 'Transferência',
+  };
+
+  paymentMethods.forEach((method) => {
+    countMap[method] = (countMap[method] || 0) + 1;
+    if (countMap[method] > maxCount) {
+      maxCount = countMap[method];
+      preferred = translations[method] || method;
+    }
+  });
+
+  return preferred;
+};
+
+export const getSupplierById = async (id: string): Promise<SupplierDetail> => {
+  const companyId = useAuthStore.getState().company?.id;
+  if (!companyId) throw new Error('Empresa não identificada.');
+
+  const { data: dbSupplier, error: supplierErr } = await supabase
+    .from('suppliers')
+    .select('*')
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .single();
+
+  if (supplierErr) throw supplierErr;
+  const supplier = mapDbSupplier(dbSupplier);
+
+  const { data: dbPurchases, error: purchasesErr } = await supabase
+    .from('purchases')
+    .select(`
+      id,
+      final_value,
+      status,
+      created_at,
+      payment_method,
+      purchase_items(
+        quantity,
+        products(
+          name
+        )
+      )
+    `)
+    .eq('supplier_id', id)
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false });
+
+  if (purchasesErr) throw purchasesErr;
+
+  const purchasesList = dbPurchases || [];
+  const paidPurchases = purchasesList.filter((p: any) => p.status === 'paid');
+
+  const totalSpent = paidPurchases.reduce((sum, p) => sum + Number(p.final_value), 0);
+  const lastPurchaseDate = purchasesList.length > 0 ? purchasesList[0].created_at : null;
+  const averageTicket = purchasesList.length > 0 ? totalSpent / purchasesList.length : 0;
+  const preferredPaymentMethod = getPreferredPurchaseMethod(purchasesList);
+
+  const purchaseHistory = purchasesList.map((p: any) => {
+    const items = p.purchase_items || [];
+    const names = items.map((item: any) => item.products?.name).filter(Boolean);
+
+    let productsStr = 'Compra de Produtos';
+    if (names.length > 0) {
+      if (names.length <= 2) {
+        productsStr = names.join(', ');
+      } else {
+        productsStr = `${names.slice(0, 2).join(', ')} e mais ${names.length - 2}`;
+      }
+    }
+
+    return {
+      id: p.id,
+      createdAt: p.created_at,
+      products: productsStr,
+      totalAmount: Number(p.final_value),
+      status: p.status as any,
+    };
+  });
+
+  return {
+    supplier,
+    metrics: {
+      totalPurchasesCount: purchasesList.length,
+      totalSpent,
+      averageTicket,
+      lastPurchaseDate,
+      preferredPaymentMethod,
+    },
+    purchaseHistory,
+  };
+};

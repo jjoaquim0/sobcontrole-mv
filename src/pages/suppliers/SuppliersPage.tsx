@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { StatCard } from '../../components/shared/StatCard';
 import { DataTable } from '../../components/shared/DataTable';
@@ -12,6 +13,7 @@ import {
   UserCheck,
   UserPlus,
   Search,
+  Eye,
   Pencil,
   Power,
   X,
@@ -55,6 +57,7 @@ const AvatarName: React.FC<{ name: string }> = ({ name }) => {
 };
 
 export const SuppliersPage: React.FC = () => {
+  const navigate = useNavigate();
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
@@ -178,9 +181,12 @@ export const SuppliersPage: React.FC = () => {
       key: 'name',
       label: 'Nome',
       render: (row: Supplier) => (
-        <span className="font-semibold text-gray-800 dark:text-gray-200">
+        <button
+          onClick={() => navigate(`/suppliers/${row.id}`)}
+          className="font-semibold text-gray-800 dark:text-gray-200 hover:text-[#10b981] dark:hover:text-[#10b981] text-left transition-colors duration-150"
+        >
           {row.name}
-        </span>
+        </button>
       ),
     },
     {
@@ -217,6 +223,15 @@ export const SuppliersPage: React.FC = () => {
       label: 'Ações',
       render: (row: Supplier) => (
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => navigate(`/suppliers/${row.id}`)}
+            className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-500 hover:bg-emerald-500/10 transition-colors duration-150"
+            title="Visualizar Detalhes"
+          >
+            <Eye className="w-4.5 h-4.5" />
+          </button>
+
           <button
             type="button"
             onClick={() => handleOpenEditModal(row)}

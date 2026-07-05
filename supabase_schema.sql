@@ -26,6 +26,24 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
+-- Tabela: Configurações da Empresa (Company Settings)
+-- Nota: relação 1:1 com companies (company_id UNIQUE).
+CREATE TABLE IF NOT EXISTS company_settings (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE UNIQUE NOT NULL,
+    timezone TEXT DEFAULT 'America/Sao_Paulo',
+    currency TEXT DEFAULT 'BRL',
+    language TEXT DEFAULT 'pt-BR',
+    date_format TEXT DEFAULT 'DD/MM/YYYY',
+    logo_url TEXT DEFAULT '',
+    primary_color TEXT DEFAULT '#10b981',
+    email_notifications BOOLEAN DEFAULT true,
+    push_notifications BOOLEAN DEFAULT true,
+    whatsapp_notifications BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
 -- Tabela: Perfis de Usuários (Profiles)
 -- Nota: id é vinculado à tabela auth.users do Supabase
 CREATE TABLE IF NOT EXISTS profiles (
@@ -164,11 +182,56 @@ CREATE TABLE IF NOT EXISTS account_payables (
     description TEXT
 );
 
+-- Módulo Financeiro (Story 1.2): novas colunas de método de pagamento e data
+-- de quitação em contas a receber/pagar, e vínculo de contas a pagar com a
+-- compra/fornecedor de origem. IF NOT EXISTS mantém a migração reversível e
+-- não destrutiva sobre dados legados.
+ALTER TABLE account_receivables
+  ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+
+ALTER TABLE account_payables
+  ADD COLUMN IF NOT EXISTS purchase_id TEXT REFERENCES purchases(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS supplier_id UUID REFERENCES suppliers(id) ON DELETE RESTRICT,
+  ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT '',
+  ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+
+-- Tabela: Categorias Financeiras (Financial Categories) — Story 1.2
+CREATE TABLE IF NOT EXISTS financial_categories (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'expense', -- 'revenue', 'expense'
+    color TEXT DEFAULT '#10b981',
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Tabela: Documentos (GED)
+CREATE TABLE IF NOT EXISTS documents (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    original_name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT 'outros',
+    mime_type TEXT DEFAULT '',
+    size INTEGER DEFAULT 0, -- em bytes
+    storage_path TEXT NOT NULL, -- caminho no Supabase Storage
+    related_type TEXT, -- 'sale', 'purchase', 'customer', 'supplier', null
+    related_id TEXT, -- ID do registro relacionado
+    status TEXT DEFAULT 'active' NOT NULL, -- 'active', 'archived'
+    uploaded_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
 -- =========================================================================
 -- 2. HABILITAR SECURITY & RLS (Row Level Security)
 -- =========================================================================
 
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE company_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
@@ -181,6 +244,8 @@ ALTER TABLE sales ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sale_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_receivables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_payables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE financial_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 
 -- =========================================================================
 -- 3. FUNÇÕES UTILITÁRIAS DE SEGURANÇA (SECURITY DEFINER)
@@ -318,6 +383,9 @@ CREATE POLICY "Gestores podem atualizar assinatura da empresa" ON subscriptions
 FOR UPDATE USING (company_id = get_user_company_id() AND get_user_role() IN ('admin', 'manager'));
 
 -- POLÍTICAS COMPARTILHADAS (Multi-tenant): Acesso total baseado no company_id
+CREATE POLICY "Acesso total dos membros da empresa às configurações" ON company_settings
+FOR ALL USING (company_id = get_user_company_id());
+
 CREATE POLICY "Acesso total dos membros da empresa às categorias" ON categories
 FOR ALL USING (company_id = get_user_company_id());
 
@@ -351,6 +419,12 @@ FOR ALL USING (company_id = get_user_company_id());
 CREATE POLICY "Acesso total dos membros da empresa às contas a pagar" ON account_payables
 FOR ALL USING (company_id = get_user_company_id());
 
+CREATE POLICY "Acesso total dos membros da empresa às categorias financeiras" ON financial_categories
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa aos documentos" ON documents
+FOR ALL USING (company_id = get_user_company_id());
+
 -- POLÍTICAS: Itens de Vendas (Sale Items)
 CREATE POLICY "Acesso total aos itens de vendas da empresa" ON sale_items
 FOR ALL USING (
@@ -368,9 +442,9 @@ FOR ALL USING (
 -- authenticated). O Supabase concede privilégios amplos ao role anon por
 -- padrão; removemos isso explicitamente para que o RLS não seja a única
 -- camada de proteção.
-REVOKE ALL ON companies, profiles, subscriptions, categories, products,
-  customers, suppliers, purchases, purchase_items, sales, sale_items,
-  account_receivables, account_payables
+REVOKE ALL ON companies, company_settings, profiles, subscriptions, categories,
+  products, customers, suppliers, purchases, purchase_items, sales, sale_items,
+  account_receivables, account_payables, financial_categories, documents
 FROM anon;
 
 -- Exceção: o front-end faz um SELECT em `companies` (e, por consequência
@@ -381,3 +455,44 @@ FROM anon;
 -- não está autenticado — só concedemos o privilégio de tentar a consulta.
 GRANT SELECT ON public.companies TO anon;
 GRANT SELECT ON public.profiles TO anon;
+
+-- =========================================================================
+-- 6. STORAGE — BUCKET DE DOCUMENTOS (GED)
+-- =========================================================================
+-- Bucket público (URLs diretas), mas gravação/exclusão restritas por RLS
+-- em storage.objects à pasta {company_id}/ de cada empresa. Já aplicado
+-- via migration supabase/migrations/20260703000000_documents_module_schema.sql
+-- — mantido aqui apenas como referência/documentação do schema completo.
+
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'documents',
+  'documents',
+  true,
+  10485760,
+  ARRAY[
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'text/csv',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/xml',
+    'application/xml'
+  ]
+)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE POLICY "Membros da empresa podem enviar documentos"
+ON storage.objects FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'documents' AND (storage.foldername(name))[1] = get_user_company_id()::text);
+
+CREATE POLICY "Membros da empresa podem ver documentos"
+ON storage.objects FOR SELECT TO authenticated
+USING (bucket_id = 'documents' AND (storage.foldername(name))[1] = get_user_company_id()::text);
+
+CREATE POLICY "Membros da empresa podem excluir documentos"
+ON storage.objects FOR DELETE TO authenticated
+USING (bucket_id = 'documents' AND (storage.foldername(name))[1] = get_user_company_id()::text);

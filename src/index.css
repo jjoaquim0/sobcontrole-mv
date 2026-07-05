@@ -34,6 +34,69 @@
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Shiny sweep animation for gradient-highlighted headline words (landing + app shell) */
+@keyframes shiny-sweep {
+  0% {
+    background-position: 0% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.animate-shiny {
+  animation: shiny-sweep 3.2s linear infinite;
+}
+
+/* App shell (logged-in area) glass surface — theme-aware, distinct from .liquid-glass below
+   (.liquid-glass is landing-only and always dark regardless of the app's saved theme) */
+.panel-glass {
+  background: rgba(0, 0, 0, 0.015);
+  backdrop-filter: blur(6px);
+  border: none;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.5), 0 1px 3px rgba(0, 0, 0, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.2px;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.08) 0%,
+    rgba(0, 0, 0, 0.03) 20%,
+    rgba(0, 0, 0, 0) 40%,
+    rgba(0, 0, 0, 0) 60%,
+    rgba(0, 0, 0, 0.03) 80%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.dark .panel-glass {
+  background: rgba(255, 255, 255, 0.015);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+.dark .panel-glass::before {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.12) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.12) 80%,
+    rgba(255, 255, 255, 0.35) 100%
+  );
+}
+
 /* Landing page (Gestly marketing) styles */
 .liquid-glass {
   background: rgba(255, 255, 255, 0.01);
@@ -273,6 +336,28 @@
 .c3-toggle.active .c3-toggle-knob {
   transform: translateX(24px);
   background: #fff;
+}
+
+/* Impressão do DRE (Módulo Relatórios) */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .dre-printable,
+  .dre-printable * {
+    visibility: visible;
+  }
+
+  .dre-printable {
+    position: absolute;
+    inset: 0;
+    padding: 24px;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
 }
 
 @media (max-width: 1024px) {

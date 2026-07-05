@@ -1,7 +1,7 @@
 import React from 'react';
-import { UnderConstruction } from '../UnderConstruction';
+import { FinancialPage } from './FinancialPage';
 
 export const Financial: React.FC = () => {
-  return <UnderConstruction title="Financeiro (Contas a Pagar/Receber)" />;
+  return <FinancialPage />;
 };
 export default Financial;

@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { StatCard } from '../../components/shared/StatCard';
 import { DataTable } from '../../components/shared/DataTable';
-import { StatusBadge } from '../../components/shared/StatusBadge';
 import { ConfirmModal } from '../../components/shared/ConfirmModal';
 
 import { ProductModal } from './components/ProductModal';
@@ -251,16 +250,15 @@ export const InventoryPage: React.FC = () => {
       label: 'Margem %',
       render: (row: Product) => {
         const margin = row.costPrice > 0 ? ((row.salePrice - row.costPrice) / row.costPrice) * 100 : 0;
-        
-        let badgeColor: 'green' | 'yellow' | 'red' = 'green';
-        if (margin < 5) badgeColor = 'red';
-        else if (margin <= 20) badgeColor = 'yellow';
+
+        let badgeClasses = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400';
+        if (margin < 5) badgeClasses = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400';
+        else if (margin <= 20) badgeClasses = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
 
         return (
-          <StatusBadge
-            variant={badgeColor}
-            label={`${margin.toFixed(1)}%`}
-          />
+          <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold tracking-wide ${badgeClasses}`}>
+            {margin.toFixed(1)}%
+          </span>
         );
       },
     },

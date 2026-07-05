@@ -1,7 +1,7 @@
 import React from 'react';
-import { UnderConstruction } from '../UnderConstruction';
+import { DocumentsPage } from './DocumentsPage';
 
 export const Documents: React.FC = () => {
-  return <UnderConstruction title="Documentos (GED)" />;
+  return <DocumentsPage />;
 };
 export default Documents;

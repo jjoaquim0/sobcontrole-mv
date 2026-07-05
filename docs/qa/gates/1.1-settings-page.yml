@@ -1,0 +1,41 @@
+schema: 1
+story: '1.1'
+gate: CONCERNS
+status_reason: 'Os três achados que motivaram o FAIL (REL-001 export quebrada, REL-002 falso sucesso na limpeza, REQ-001 nome read-only) foram corrigidos e verificados. Permanece apenas SEC-001 (low), placeholder autorizado pela AC 15 — não bloqueante.'
+reviewer: 'Quinn'
+updated: '2026-07-02T00:00:00Z'
+history:
+  - at: '2026-07-02T00:00:00Z'
+    gate: FAIL
+    note: 'REL-001 (high) export quebrada + REL-002 (medium) falso sucesso + REQ-001 (medium) nome read-only + SEC-001 (low).'
+  - at: '2026-07-02T00:00:00Z'
+    gate: CONCERNS
+    note: 'Re-review: REL-001, REL-002 e REQ-001 corrigidos e verificados (schema + tsc). Resta SEC-001 (low).'
+resolved_issues:
+  - id: 'REL-001'
+    severity: high
+    resolution: 'sale_items/purchase_items removidos de EXPORT_TABLES. exportAllData() agora coleta sale_id/purchase_id das vendas/compras da empresa e busca os itens via .in(), com guarda de array vazio (retorna [] sem executar query inválida). RLS filho (EXISTS via pai) autoriza a leitura; sem vazamento multi-tenant. Formato do JSON preservado.'
+    verified_by: 'Leitura de src/services/settingsService.ts (linhas 260-306) + confirmação de que purchase_items (schema 128-135) e sale_items (154-161) não possuem company_id.'
+  - id: 'REL-002'
+    severity: medium
+    resolution: 'DataTab "Limpar Dados de Teste" convertido em placeholder honesto "Em breve" (padrão de Importar Dados). Removidos ConfirmModal, setTimeout e toast.success de falso sucesso. Sem código morto nem imports não usados.'
+    verified_by: 'Leitura de src/pages/settings/tabs/DataTab.tsx.'
+  - id: 'REQ-001'
+    severity: medium
+    resolution: 'updateCompanyName(name) adicionado ao service (update .eq(id, companyId) → RLS "Usuários podem atualizar a própria empresa" FOR UPDATE USING (id = get_user_company_id()), schema 318-319, multi-tenant seguro; só o campo name é alterado). Mutation no hook atualiza useAuthStore.company no onSuccess. Campo "Nome da Empresa" habilitado no GeneralTab, salvo no mesmo submit dos campos regionais. AC 18 agora cumprida.'
+    verified_by: 'Leitura de settingsService.ts (134-154), useSettings.ts (51-59, 167-168) e GeneralTab.tsx (72-82, 112-115) + confirmação da policy de UPDATE em companies.'
+top_issues:
+  - id: 'SEC-001'
+    severity: low
+    finding: 'Chaves de API são geradas com prefixo enganoso sk_live_ e persistidas em localStorage em texto puro (placeholder autorizado pela AC 15). O prefixo imita credenciais reais de produção.'
+    suggested_action: 'Usar prefixo/label explícito de demonstração (ex.: demo_) enquanto não houver tabela dedicada. Aceitável como concern documentado — AC 15 autoriza o mock.'
+quality_checks:
+  code_review: PASS
+  tests: 'N/A (projeto sem framework de testes; validado via tsc + revisão manual)'
+  acceptance_criteria: 'PASS (AC 25 export e AC 18 nome editável agora cumpridas)'
+  regressions: 'PASS (tsc --noEmit EXIT 0; schema aditivo; rota inalterada)'
+  performance: PASS
+  security: 'CONCERNS (SEC-001 low, autorizado por AC 15; RLS multi-tenant validada em company_settings e companies)'
+  documentation: 'N/A'
+tsc_noemit: 'PASS (EXIT 0, executado pela QA no re-review)'
+waiver: { active: false }

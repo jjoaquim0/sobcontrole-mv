@@ -10,6 +10,7 @@ import {
   Package,
   Truck,
   ShoppingCart,
+  KanbanSquare,
   CreditCard,
   BarChart3,
   FileText,
@@ -52,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Operacional',
       items: [
         { name: 'Vendas', path: '/sales', icon: ShoppingBag },
+        { name: 'Pipeline', path: '/pipeline', icon: KanbanSquare },
         { name: 'Clientes', path: '/customers', icon: Users },
         { name: 'Estoque', path: '/inventory', icon: Package },
         { name: 'Fornecedores', path: '/suppliers', icon: Truck },

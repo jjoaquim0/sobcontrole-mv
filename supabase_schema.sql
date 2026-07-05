@@ -207,6 +207,51 @@ CREATE TABLE IF NOT EXISTS financial_categories (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
+-- Tabela: Etapas do Pipeline de Vendas (Pipeline Stages) — Story 1.3
+-- Nota: position é DOUBLE PRECISION (não INTEGER) para permitir reordenação
+-- por inserção de ponto médio sem renumerar as demais linhas.
+CREATE TABLE IF NOT EXISTS pipeline_stages (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL DEFAULT '#10b981',
+    position DOUBLE PRECISION NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Tabela: Negócios/Oportunidades (Deals) — Story 1.3
+-- Nota: status é independente de stage_id — o board do Kanban exibe apenas
+-- negócios 'open'; marcar como Ganho/Perdido fecha o negócio.
+CREATE TABLE IF NOT EXISTS deals (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    title TEXT NOT NULL,
+    customer_id UUID REFERENCES customers(id) ON DELETE RESTRICT NOT NULL,
+    owner_id UUID REFERENCES profiles(id) ON DELETE RESTRICT NOT NULL,
+    stage_id UUID REFERENCES pipeline_stages(id) ON DELETE RESTRICT NOT NULL,
+    value NUMERIC(12, 2) DEFAULT 0.00 NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open', -- 'open', 'won', 'lost'
+    expected_close_date DATE,
+    position DOUBLE PRECISION NOT NULL DEFAULT 0,
+    notes TEXT DEFAULT '',
+    lost_reason TEXT,
+    closed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Tabela: Histórico de Movimentação de Etapa (Deal Stage History) — Story 1.3
+CREATE TABLE IF NOT EXISTS deal_stage_history (
+    id UUID PRIMARY KEY,
+    deal_id UUID REFERENCES deals(id) ON DELETE CASCADE NOT NULL,
+    from_stage_id UUID REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+    to_stage_id UUID REFERENCES pipeline_stages(id) ON DELETE RESTRICT NOT NULL,
+    changed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    changed_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
 -- Tabela: Documentos (GED)
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY,
@@ -246,6 +291,9 @@ ALTER TABLE account_receivables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE account_payables ENABLE ROW LEVEL SECURITY;
 ALTER TABLE financial_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pipeline_stages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE deal_stage_history ENABLE ROW LEVEL SECURITY;
 
 -- =========================================================================
 -- 3. FUNÇÕES UTILITÁRIAS DE SEGURANÇA (SECURITY DEFINER)
@@ -328,6 +376,15 @@ BEGIN
 
   INSERT INTO public.subscriptions (id, company_id, plan, status, current_period_end, usage_limit, usage_current)
   VALUES (v_subscription_id, v_company_id, 'pro', 'active', now() + interval '14 days', 200, 0);
+
+  -- Etapas padrão do Pipeline de Vendas (Story 1.3) para toda empresa nova
+  INSERT INTO public.pipeline_stages (id, company_id, name, color, position)
+  VALUES
+    (gen_random_uuid(), v_company_id, 'Novo Contato', '#6366f1', 0),
+    (gen_random_uuid(), v_company_id, 'Qualificação', '#3b82f6', 1),
+    (gen_random_uuid(), v_company_id, 'Proposta Enviada', '#f59e0b', 2),
+    (gen_random_uuid(), v_company_id, 'Negociação', '#f97316', 3),
+    (gen_random_uuid(), v_company_id, 'Fechamento', '#10b981', 4);
 
   RETURN QUERY
   SELECT c.id, c.name, c.cnpj, c.created_at, c.updated_at,
@@ -425,6 +482,22 @@ FOR ALL USING (company_id = get_user_company_id());
 CREATE POLICY "Acesso total dos membros da empresa aos documentos" ON documents
 FOR ALL USING (company_id = get_user_company_id());
 
+CREATE POLICY "Acesso total dos membros da empresa às etapas do pipeline" ON pipeline_stages
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE POLICY "Acesso total dos membros da empresa aos negócios" ON deals
+FOR ALL USING (company_id = get_user_company_id());
+
+-- POLÍTICAS: Histórico de Negócios (Deal Stage History)
+CREATE POLICY "Acesso total ao histórico de negócios da empresa" ON deal_stage_history
+FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.deals
+    WHERE deals.id = deal_stage_history.deal_id
+      AND deals.company_id = get_user_company_id()
+  )
+);
+
 -- POLÍTICAS: Itens de Vendas (Sale Items)
 CREATE POLICY "Acesso total aos itens de vendas da empresa" ON sale_items
 FOR ALL USING (
@@ -444,7 +517,8 @@ FOR ALL USING (
 -- camada de proteção.
 REVOKE ALL ON companies, company_settings, profiles, subscriptions, categories,
   products, customers, suppliers, purchases, purchase_items, sales, sale_items,
-  account_receivables, account_payables, financial_categories, documents
+  account_receivables, account_payables, financial_categories, documents,
+  pipeline_stages, deals, deal_stage_history
 FROM anon;
 
 -- Exceção: o front-end faz um SELECT em `companies` (e, por consequência

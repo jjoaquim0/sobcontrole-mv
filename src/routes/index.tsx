@@ -12,6 +12,7 @@ import { Register } from '../pages/auth/Register';
 import { SubscriptionInactive } from '../pages/auth/SubscriptionInactive';
 import { Dashboard } from '../pages/dashboard';
 import { Sales, SaleDetailPage } from '../pages/sales';
+import { Pipeline } from '../pages/pipeline';
 import { Inventory, ProductDetailPage } from '../pages/inventory';
 import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
@@ -76,6 +77,10 @@ export const router = createBrowserRouter([
       {
         path: 'sales/:id',
         element: <SaleDetailPage />,
+      },
+      {
+        path: 'pipeline',
+        element: <Pipeline />,
       },
       {
         path: 'customers',

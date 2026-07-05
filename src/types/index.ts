@@ -14,6 +14,8 @@ export type FinancialCategoryType = 'revenue' | 'expense';
 
 export type DocumentStatus = 'active' | 'archived';
 
+export type DealStatus = 'open' | 'won' | 'lost';
+
 export type CustomerType = 'individual' | 'corporate'; // pf ou pj
 
 export type CommonStatus = 'active' | 'inactive';
@@ -233,3 +235,46 @@ export interface Document {
 }
 
 export type DocumentCategory = 'nota_fiscal' | 'contrato' | 'boleto' | 'recibo' | 'empresa' | 'cliente' | 'fornecedor' | 'outros';
+
+export interface PipelineStage {
+  id: string;
+  companyId: string;
+  name: string;
+  color: string;
+  position: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Deal {
+  id: string;
+  companyId: string;
+  title: string;
+  customerId: string;
+  customer?: Customer;
+  ownerId: string;
+  ownerName?: string;
+  stageId: string;
+  value: number;
+  status: DealStatus;
+  expectedCloseDate?: string;
+  position: number;
+  notes?: string;
+  lostReason?: string;
+  closedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DealStageHistoryEntry {
+  id: string;
+  dealId: string;
+  fromStageId?: string;
+  fromStageName?: string;
+  toStageId: string;
+  toStageName?: string;
+  changedBy?: string;
+  changedByName?: string;
+  changedAt: string;
+}

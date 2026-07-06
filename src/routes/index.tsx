@@ -13,6 +13,7 @@ import { SubscriptionInactive } from '../pages/auth/SubscriptionInactive';
 import { Dashboard } from '../pages/dashboard';
 import { Sales, SaleDetailPage } from '../pages/sales';
 import { Pipeline } from '../pages/pipeline';
+import { Agenda } from '../pages/agenda';
 import { Inventory, ProductDetailPage } from '../pages/inventory';
 import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
@@ -81,6 +82,10 @@ export const router = createBrowserRouter([
       {
         path: 'pipeline',
         element: <Pipeline />,
+      },
+      {
+        path: 'agenda',
+        element: <Agenda />,
       },
       {
         path: 'customers',

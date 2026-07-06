@@ -16,6 +16,10 @@ export type DocumentStatus = 'active' | 'archived';
 
 export type DealStatus = 'open' | 'won' | 'lost';
 
+export type AppointmentType = 'reuniao' | 'tarefa' | 'ligacao' | 'visita' | 'lembrete';
+
+export type AppointmentStatus = 'agendado' | 'confirmado' | 'concluido' | 'cancelado' | 'nao_compareceu' | 'pendente';
+
 export type CustomerType = 'individual' | 'corporate'; // pf ou pj
 
 export type CommonStatus = 'active' | 'inactive';
@@ -277,4 +281,27 @@ export interface DealStageHistoryEntry {
   changedBy?: string;
   changedByName?: string;
   changedAt: string;
+}
+
+export interface Appointment {
+  id: string;
+  companyId: string;
+  customerId?: string;
+  customer?: Customer;
+  dealId?: string;
+  dealTitle?: string;
+  assignedUserId: string;
+  assignedUserName?: string;
+  createdBy?: string;
+  title: string;
+  description?: string;
+  type: AppointmentType;
+  status: AppointmentStatus;
+  startAt: string;
+  endAt: string;
+  allDay: boolean;
+  location?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }

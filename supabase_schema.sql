@@ -252,6 +252,37 @@ CREATE TABLE IF NOT EXISTS deal_stage_history (
     changed_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
+-- Tabela: Compromissos da Agenda (Appointments) — Story 1.4
+-- customer_id/deal_id são opcionais (compromisso pode ser puramente
+-- operacional); assigned_user_id (responsável) é obrigatório.
+CREATE TABLE IF NOT EXISTS appointments (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+    deal_id UUID REFERENCES deals(id) ON DELETE SET NULL,
+    assigned_user_id UUID REFERENCES profiles(id) ON DELETE RESTRICT NOT NULL,
+    created_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    type TEXT NOT NULL DEFAULT 'reuniao', -- 'reuniao', 'tarefa', 'ligacao', 'visita', 'lembrete'
+    status TEXT NOT NULL DEFAULT 'agendado', -- 'agendado', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu', 'pendente'
+    start_at TIMESTAMPTZ NOT NULL,
+    end_at TIMESTAMPTZ NOT NULL,
+    all_day BOOLEAN NOT NULL DEFAULT false,
+    location TEXT DEFAULT '',
+    notes TEXT DEFAULT '',
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT appointments_end_after_start CHECK (end_at >= start_at),
+    CONSTRAINT appointments_type_check CHECK (type IN ('reuniao', 'tarefa', 'ligacao', 'visita', 'lembrete')),
+    CONSTRAINT appointments_status_check CHECK (status IN ('agendado', 'confirmado', 'concluido', 'cancelado', 'nao_compareceu', 'pendente'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_appointments_company_start ON appointments(company_id, start_at);
+CREATE INDEX IF NOT EXISTS idx_appointments_assigned_user ON appointments(assigned_user_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_customer ON appointments(customer_id);
+CREATE INDEX IF NOT EXISTS idx_appointments_deal ON appointments(deal_id);
+
 -- Tabela: Documentos (GED)
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY,
@@ -294,6 +325,7 @@ ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pipeline_stages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE deal_stage_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE appointments ENABLE ROW LEVEL SECURITY;
 
 -- =========================================================================
 -- 3. FUNÇÕES UTILITÁRIAS DE SEGURANÇA (SECURITY DEFINER)
@@ -498,6 +530,10 @@ FOR ALL USING (
   )
 );
 
+-- POLÍTICAS: Agenda (Appointments)
+CREATE POLICY "Acesso total dos membros da empresa aos compromissos" ON appointments
+FOR ALL USING (company_id = get_user_company_id());
+
 -- POLÍTICAS: Itens de Vendas (Sale Items)
 CREATE POLICY "Acesso total aos itens de vendas da empresa" ON sale_items
 FOR ALL USING (
@@ -518,7 +554,7 @@ FOR ALL USING (
 REVOKE ALL ON companies, company_settings, profiles, subscriptions, categories,
   products, customers, suppliers, purchases, purchase_items, sales, sale_items,
   account_receivables, account_payables, financial_categories, documents,
-  pipeline_stages, deals, deal_stage_history
+  pipeline_stages, deals, deal_stage_history, appointments
 FROM anon;
 
 -- Exceção: o front-end faz um SELECT em `companies` (e, por consequência

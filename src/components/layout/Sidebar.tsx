@@ -11,6 +11,7 @@ import {
   Truck,
   ShoppingCart,
   KanbanSquare,
+  CalendarDays,
   CreditCard,
   BarChart3,
   FileText,
@@ -54,6 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       items: [
         { name: 'Vendas', path: '/sales', icon: ShoppingBag },
         { name: 'Pipeline', path: '/pipeline', icon: KanbanSquare },
+        { name: 'Agenda', path: '/agenda', icon: CalendarDays },
         { name: 'Clientes', path: '/customers', icon: Users },
         { name: 'Estoque', path: '/inventory', icon: Package },
         { name: 'Fornecedores', path: '/suppliers', icon: Truck },

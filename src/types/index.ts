@@ -44,6 +44,7 @@ export interface CompanySettings {
   emailNotifications: boolean;
   pushNotifications: boolean;
   whatsappNotifications: boolean;
+  smsNotifications: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -304,4 +305,187 @@ export interface Appointment {
   notes?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export type NotificationCategory =
+  | 'agenda'
+  | 'pipeline'
+  | 'vendas'
+  | 'clientes'
+  | 'financeiro'
+  | 'estoque'
+  | 'metas'
+  | 'equipe';
+
+export type NotificationPriority = 'informativa' | 'baixa' | 'media' | 'alta' | 'critica';
+
+export type NotificationStatus = 'unread' | 'read' | 'resolved' | 'archived';
+
+export type NotificationChannel = 'push' | 'email' | 'email_digest' | 'sms';
+
+export type NotificationDeliveryStatus = 'queued' | 'sending' | 'sent' | 'delivered' | 'failed' | 'skipped';
+
+export type NotificationActionType =
+  | 'send_message'
+  | 'create_task'
+  | 'schedule_meeting'
+  | 'open_customer'
+  | 'open_deal'
+  | 'reassign'
+  | 'snooze'
+  | 'resolve'
+  | 'dismiss';
+
+export type DigestFrequency = 'immediate' | 'daily' | 'weekly' | 'none';
+
+export type NotificationEventType =
+  | 'appointment_upcoming'
+  | 'appointment_overdue'
+  | 'deal_stale'
+  | 'proposal_expiring'
+  | 'sale_no_followup'
+  | 'customer_at_risk'
+  | 'payment_receivable_due'
+  | 'payment_payable_due'
+  | 'low_stock'
+  | 'sales_goal_at_risk'
+  | 'team_event_created';
+
+export interface Notification {
+  id: string;
+  companyId: string;
+  eventId?: string;
+  recipientUserId: string;
+  category: NotificationCategory;
+  eventType: NotificationEventType;
+  priority: NotificationPriority;
+  title: string;
+  message: string;
+  aiSummary?: string;
+  aiPriorityReason?: string;
+  aiSuggestedAction?: NotificationActionType;
+  aiSuggestedDeadline?: string;
+  aiSuggestedMessage?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  channels: NotificationChannel[];
+  status: NotificationStatus;
+  snoozedUntil?: string;
+  actionTaken?: NotificationActionType;
+  actionTakenAt?: string;
+  readAt?: string;
+  resolvedAt?: string;
+  createdAt: string;
+}
+
+export interface NotificationDelivery {
+  id: string;
+  notificationId: string;
+  channel: NotificationChannel;
+  status: NotificationDeliveryStatus;
+  provider?: string;
+  providerMessageId?: string;
+  attemptCount: number;
+  maxAttempts: number;
+  lastError?: string;
+  nextRetryAt?: string;
+  queuedAt: string;
+  sentAt?: string;
+  deliveredAt?: string;
+  openedAt?: string;
+  failedAt?: string;
+  createdAt: string;
+}
+
+export interface NotificationPreferences {
+  id: string;
+  companyId: string;
+  userId: string;
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+  smsEnabled: boolean;
+  categoriesEnabled: NotificationCategory[];
+  minPriorityPush: NotificationPriority;
+  minPriorityEmail: NotificationPriority;
+  minPrioritySms: NotificationPriority;
+  quietHoursStart?: string;
+  quietHoursEnd?: string;
+  digestFrequency: DigestFrequency;
+  phone: string;
+  notificationEmail: string;
+  consentPush: boolean;
+  consentPushAt?: string;
+  consentEmail: boolean;
+  consentEmailAt?: string;
+  consentSms: boolean;
+  consentSmsAt?: string;
+  gestlyRecommendationsEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationAction {
+  id: string;
+  notificationId: string;
+  actionType: NotificationActionType;
+  performedBy?: string;
+  payload: Record<string, unknown>;
+  performedAt: string;
+}
+
+export interface PushSubscriptionRecord {
+  id: string;
+  userId: string;
+  endpoint: string;
+  p256dh: string;
+  authKey: string;
+  userAgent?: string;
+  createdAt: string;
+}
+
+export type AnalyticsModuleCategory = 'geral' | 'vendas' | 'clientes' | 'financeiro' | 'estoque' | 'ia';
+
+export type AnalyticsModulePlanRequirement = 'free' | 'pro' | 'enterprise';
+
+export type AnalyticsModuleAccessStatus = 'available' | 'contracted' | 'coming_soon' | 'locked';
+
+export type AnalyticsModuleContractStatus = 'active' | 'inactive';
+
+export type AnalyticsModuleHistoryAction = 'activated' | 'deactivated';
+
+export interface AnalyticsModule {
+  id: string;
+  key: string;
+  name: string;
+  category: AnalyticsModuleCategory;
+  minPlan: AnalyticsModulePlanRequirement | null;
+  isAddon: boolean;
+  isComingSoon: boolean;
+  isActive: boolean;
+  routePath: string;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanyAnalyticsModule {
+  id: string;
+  companyId: string;
+  moduleKey: string;
+  status: AnalyticsModuleContractStatus;
+  activatedAt: string;
+  deactivatedAt?: string;
+  activatedBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnalyticsModuleHistoryEntry {
+  id: string;
+  companyId: string;
+  moduleKey: string;
+  action: AnalyticsModuleHistoryAction;
+  performedBy?: string;
+  note?: string;
+  performedAt: string;
 }

@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { SettingsSidebar, SettingsTabId } from './SettingsSidebar';
+import { SETTINGS_TAB_IDS } from './settingsTabIds';
 import { GeneralTab } from './tabs/GeneralTab';
 import { AppearanceTab } from './tabs/AppearanceTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
@@ -34,8 +36,14 @@ const renderTab = (tab: SettingsTabId): React.ReactNode => {
   }
 };
 
+const resolveInitialTab = (searchParams: URLSearchParams): SettingsTabId => {
+  const tabParam = searchParams.get('tab');
+  return SETTINGS_TAB_IDS.includes(tabParam as SettingsTabId) ? (tabParam as SettingsTabId) : 'general';
+};
+
 export const SettingsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<SettingsTabId>('general');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(() => resolveInitialTab(searchParams));
 
   return (
     <div className="space-y-6">

@@ -1,120 +1,121 @@
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AlertTriangle, Bell, FileSpreadsheet, SlidersHorizontal, Wallet } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/shared/PageHeader';
+import { useNotifications } from '../../hooks/useNotifications';
+import { ReportQueryKey, useReports } from '../../hooks/useReports';
+import { ReportPeriod } from '../../types';
+import { NotificationItem } from '../notifications/components/NotificationItem';
 import { PeriodSelector } from './components/PeriodSelector';
-import { OverviewTab } from './tabs/OverviewTab';
+import { CustomersTab } from './tabs/CustomersTab';
 import { DRETab } from './tabs/DRETab';
-import { SalesTab } from './tabs/SalesTab';
 import { FinancialTab } from './tabs/FinancialTab';
 import { InventoryTab } from './tabs/InventoryTab';
-import { CustomersTab } from './tabs/CustomersTab';
-import { useReports } from '../../hooks/useReports';
-import { ReportPeriod } from '../../types';
-import { LayoutGrid, FileSpreadsheet, ShoppingCart, Wallet, Package, Users, Printer } from 'lucide-react';
+import { OverviewTab } from './tabs/OverviewTab';
+import { SalesTab } from './tabs/SalesTab';
 
-type ReportTab = 'overview' | 'dre' | 'sales' | 'financial' | 'inventory' | 'customers';
+type ReportDomain = 'overview' | 'sales' | 'customers' | 'financial' | 'inventory';
 
-const TABS: { key: ReportTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'overview', label: 'Visão Geral', icon: <LayoutGrid className="w-4 h-4" /> },
-  { key: 'dre', label: 'DRE', icon: <FileSpreadsheet className="w-4 h-4" /> },
-  { key: 'sales', label: 'Vendas', icon: <ShoppingCart className="w-4 h-4" /> },
-  { key: 'financial', label: 'Financeiro', icon: <Wallet className="w-4 h-4" /> },
-  { key: 'inventory', label: 'Estoque', icon: <Package className="w-4 h-4" /> },
-  { key: 'customers', label: 'Clientes', icon: <Users className="w-4 h-4" /> },
-];
+interface ReportDomainPageProps {
+  domain: ReportDomain;
+  title: string;
+  subtitle: string;
+}
 
-export const ReportsPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ReportTab>('overview');
+const DOMAIN_QUERIES: Record<ReportDomain, readonly ReportQueryKey[]> = {
+  overview: ['overview'],
+  sales: ['sales'],
+  customers: ['customer'],
+  financial: ['financial', 'dre'],
+  inventory: ['inventory'],
+};
+
+const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subtitle }) => {
   const [period, setPeriod] = useState<ReportPeriod>({ type: '30d' });
-
-  const { overview, dre, sales, financial, inventory, customer, exportCSV, formatCurrency, formatDate } = useReports(period);
-
+  const [searchParams, setSearchParams] = useSearchParams();
+  const reports = useReports(period, DOMAIN_QUERIES[domain]);
+  const financialView = searchParams.get('view') === 'dre' ? 'dre' : 'cashflow';
   const todayStamp = new Date().toISOString().slice(0, 10);
 
   const handleExport = () => {
-    switch (activeTab) {
-      case 'overview':
-        if (overview.data) {
-          exportCSV(
-            [
-              { indicador: 'Receita', valor: overview.data.revenue.current },
-              { indicador: 'Despesas', valor: overview.data.expenses.current },
-              { indicador: 'Lucro', valor: overview.data.profit.current },
-              { indicador: 'Vendas', valor: overview.data.salesCount.current },
-              { indicador: 'Ticket Médio', valor: overview.data.averageTicket.current },
-              { indicador: 'Clientes Ativos', valor: overview.data.activeCustomers },
-              { indicador: 'Estoque Baixo', valor: overview.data.lowStockProducts },
-              { indicador: 'Saúde Financeira (%)', valor: overview.data.financialHealth },
-            ],
-            `relatorio-visao-geral-${todayStamp}`
-          );
-        }
-        break;
-      case 'dre':
-        if (dre.data) {
-          exportCSV(
-            dre.data.entries.map((e) => ({ categoria: e.category, valor: e.value })),
-            `relatorio-dre-${todayStamp}`
-          );
-        }
-        break;
-      case 'sales':
-        if (sales.data) {
-          exportCSV(
-            sales.data.byProduct.map((p) => ({ produto: p.productName, quantidade: p.quantity, receita: p.revenue })),
-            `relatorio-vendas-${todayStamp}`
-          );
-        }
-        break;
-      case 'financial':
-        if (financial.data) {
-          exportCSV(
-            [
-              ...financial.data.receivables.byDueDate.map((r) => ({ tipo: 'A Receber', data: r.date, valor: r.amount })),
-              ...financial.data.payables.byDueDate.map((p) => ({ tipo: 'A Pagar', data: p.date, valor: p.amount })),
-            ],
-            `relatorio-financeiro-${todayStamp}`
-          );
-        }
-        break;
-      case 'inventory':
-        if (inventory.data) {
-          exportCSV(
-            inventory.data.movements.map((m) => ({ data: m.date, produto: m.productName, tipo: m.type === 'in' ? 'Entrada' : 'Saída', quantidade: m.quantity })),
-            `relatorio-estoque-${todayStamp}`
-          );
-        }
-        break;
-      case 'customers':
-        if (customer.data) {
-          exportCSV(
-            customer.data.topBuyers.map((c) => ({
-              cliente: c.customerName,
-              totalGasto: c.totalSpent,
-              compras: c.saleCount,
-              ticketMedio: c.averageTicket,
-              ultimaCompra: formatDate(c.lastPurchase),
-            })),
-            `relatorio-clientes-${todayStamp}`
-          );
-        }
-        break;
+    if (domain === 'overview' && reports.overview.data) {
+      const data = reports.overview.data;
+      reports.exportCSV(
+        [
+          { indicador: 'Receita', valor: data.revenue.current },
+          { indicador: 'Despesas', valor: data.expenses.current },
+          { indicador: 'Lucro', valor: data.profit.current },
+          { indicador: 'Vendas', valor: data.salesCount.current },
+          { indicador: 'Ticket Médio', valor: data.averageTicket.current },
+          { indicador: 'Clientes Ativos', valor: data.activeCustomers },
+        ],
+        `relatorio-visao-geral-${todayStamp}`
+      );
+    }
+
+    if (domain === 'sales' && reports.sales.data) {
+      reports.exportCSV(
+        reports.sales.data.byProduct.map((item) => ({ produto: item.productName, quantidade: item.quantity, receita: item.revenue })),
+        `relatorio-vendas-${todayStamp}`
+      );
+    }
+
+    if (domain === 'customers' && reports.customer.data) {
+      reports.exportCSV(
+        reports.customer.data.topBuyers.map((customer) => ({
+          cliente: customer.customerName,
+          totalGasto: customer.totalSpent,
+          compras: customer.saleCount,
+          ticketMedio: customer.averageTicket,
+          ultimaCompra: reports.formatDate(customer.lastPurchase),
+        })),
+        `relatorio-clientes-${todayStamp}`
+      );
+    }
+
+    if (domain === 'financial' && financialView === 'dre' && reports.dre.data) {
+      reports.exportCSV(
+        reports.dre.data.entries.map((entry) => ({ categoria: entry.category, valor: entry.value })),
+        `relatorio-dre-${todayStamp}`
+      );
+    }
+
+    if (domain === 'financial' && financialView === 'cashflow' && reports.financial.data) {
+      reports.exportCSV(
+        [
+          ...reports.financial.data.receivables.byDueDate.map((item) => ({ tipo: 'A Receber', data: item.date, valor: item.amount })),
+          ...reports.financial.data.payables.byDueDate.map((item) => ({ tipo: 'A Pagar', data: item.date, valor: item.amount })),
+        ],
+        `relatorio-financeiro-${todayStamp}`
+      );
+    }
+
+    if (domain === 'inventory' && reports.inventory.data) {
+      reports.exportCSV(
+        reports.inventory.data.movements.map((movement) => ({
+          data: movement.date,
+          produto: movement.productName,
+          tipo: movement.type === 'in' ? 'Entrada' : 'Saída',
+          quantidade: movement.quantity,
+        })),
+        `relatorio-estoque-${todayStamp}`
+      );
     }
   };
 
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader
-        title="Relatórios"
-        subtitle="Analise os dados da sua empresa com gráficos e indicadores"
+        title={title}
+        subtitle={subtitle}
         action={
-          activeTab === 'dre' ? (
+          domain === 'financial' && financialView === 'dre' ? (
             <button
               type="button"
               onClick={() => window.print()}
-              className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 transition-colors duration-200 flex items-center gap-1.5 print:hidden"
+              className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1.5 print:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8]"
             >
-              <Printer className="w-4 h-4" />
+              <FileSpreadsheet className="w-4 h-4" />
               Imprimir DRE
             </button>
           ) : undefined
@@ -123,59 +124,84 @@ export const ReportsPage: React.FC = () => {
 
       <PeriodSelector period={period} onChange={setPeriod} />
 
-      <div className="flex items-center gap-1 border-b border-gray-200 dark:border-white/10 overflow-x-auto">
-        {TABS.map((tab) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors duration-200 ${
-                isActive
-                  ? 'border-[#10b981] text-[#10b981]'
-                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-white'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                {tab.icon}
-                {tab.label}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {domain === 'financial' && (
+        <div className="inline-flex rounded-lg bg-gray-100 dark:bg-white/5 p-1" aria-label="Visão financeira">
+          <button
+            type="button"
+            onClick={() => setSearchParams({})}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${financialView === 'cashflow' ? 'bg-white dark:bg-[#1a1d27] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-white/50'}`}
+          >
+            <Wallet className="w-4 h-4" /> Financeiro
+          </button>
+          <button
+            type="button"
+            onClick={() => setSearchParams({ view: 'dre' })}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${financialView === 'dre' ? 'bg-white dark:bg-[#1a1d27] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-white/50'}`}
+          >
+            <FileSpreadsheet className="w-4 h-4" /> DRE
+          </button>
+        </div>
+      )}
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={activeTab}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-        >
-          {activeTab === 'overview' && (
-            <OverviewTab data={overview.data} isLoading={overview.isLoading} isError={overview.isError} formatCurrency={formatCurrency} onExport={handleExport} />
-          )}
-          {activeTab === 'dre' && (
-            <DRETab data={dre.data} isLoading={dre.isLoading} isError={dre.isError} formatCurrency={formatCurrency} formatDate={formatDate} onExport={handleExport} />
-          )}
-          {activeTab === 'sales' && (
-            <SalesTab data={sales.data} isLoading={sales.isLoading} isError={sales.isError} formatCurrency={formatCurrency} onExport={handleExport} />
-          )}
-          {activeTab === 'financial' && (
-            <FinancialTab data={financial.data} isLoading={financial.isLoading} isError={financial.isError} formatCurrency={formatCurrency} onExport={handleExport} />
-          )}
-          {activeTab === 'inventory' && (
-            <InventoryTab data={inventory.data} isLoading={inventory.isLoading} isError={inventory.isError} formatCurrency={formatCurrency} onExport={handleExport} />
-          )}
-          {activeTab === 'customers' && (
-            <CustomersTab data={customer.data} isLoading={customer.isLoading} isError={customer.isError} formatCurrency={formatCurrency} formatDate={formatDate} onExport={handleExport} />
-          )}
-        </motion.div>
-      </AnimatePresence>
+      {domain === 'overview' && <OverviewTab data={reports.overview.data} isLoading={reports.overview.isLoading} isError={reports.overview.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
+      {domain === 'sales' && <SalesTab data={reports.sales.data} isLoading={reports.sales.isLoading} isError={reports.sales.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
+      {domain === 'customers' && <CustomersTab data={reports.customer.data} isLoading={reports.customer.isLoading} isError={reports.customer.isError} formatCurrency={reports.formatCurrency} formatDate={reports.formatDate} onExport={handleExport} />}
+      {domain === 'financial' && financialView === 'cashflow' && <FinancialTab data={reports.financial.data} isLoading={reports.financial.isLoading} isError={reports.financial.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
+      {domain === 'financial' && financialView === 'dre' && <DRETab data={reports.dre.data} isLoading={reports.dre.isLoading} isError={reports.dre.isError} formatCurrency={reports.formatCurrency} formatDate={reports.formatDate} onExport={handleExport} />}
+      {domain === 'inventory' && <InventoryTab data={reports.inventory.data} isLoading={reports.inventory.isLoading} isError={reports.inventory.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
     </div>
   );
 };
 
-export default ReportsPage;
+export const ReportsOverviewPage = () => <ReportDomainPage domain="overview" title="Visão Geral" subtitle="Principais indicadores da sua empresa em um único painel" />;
+
+export const ReportsSalesPage = () => <ReportDomainPage domain="sales" title="Vendas e Pipeline" subtitle="Acompanhe receita, ticket médio e desempenho comercial" />;
+
+export const ReportsCustomersPage = () => <ReportDomainPage domain="customers" title="Clientes" subtitle="Entenda atividade, rentabilidade e comportamento da sua base" />;
+
+export const ReportsFinancialPage = () => <ReportDomainPage domain="financial" title="Financeiro" subtitle="Receitas, contas, inadimplência, fluxo de caixa e DRE" />;
+
+export const ReportsInventoryPage = () => <ReportDomainPage domain="inventory" title="Estoque e Compras" subtitle="Giro, rupturas, movimentações e desempenho dos produtos" />;
+
+export const ReportsIntelligencePage: React.FC = () => {
+  const { data: notifications, isLoading, isError, refetch } = useNotifications({ limit: 50 });
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <PageHeader title="Central de Inteligência" subtitle="Insights, alertas, oportunidades e ações sugeridas pela Gestly" />
+
+      {isLoading ? (
+        <div className="space-y-3" role="status" aria-label="Carregando inteligencia">
+          {Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 rounded-2xl bg-gray-100 dark:bg-white/5 animate-pulse" />)}
+        </div>
+      ) : isError ? (
+        <div className="min-h-[360px] flex flex-col items-center justify-center text-center gap-3">
+          <AlertTriangle className="w-8 h-8 text-red-400" />
+          <p className="text-sm text-red-500">Erro ao carregar os insights da Gestly.</p>
+          <button type="button" onClick={() => refetch()} className="text-sm font-semibold text-[#00a8d8] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] rounded">Tentar novamente</button>
+        </div>
+      ) : !notifications?.length ? (
+        <div className="min-h-[360px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">
+          <Bell className="w-9 h-9 text-gray-300 dark:text-white/20 mb-3" />
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white">Nenhum insight no momento</h2>
+          <p className="text-xs text-gray-500 dark:text-white/50 mt-1">A Gestly exibirá oportunidades e alertas assim que identificar sinais relevantes.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {notifications.map((notification) => <NotificationItem key={notification.id} notification={notification} />)}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export const ReportsCustomPage: React.FC = () => (
+  <div className="animate-fade-in">
+    <PageHeader title="Relatórios Personalizados" subtitle="Crie, salve, exporte e agende relatórios sob medida" />
+    <div className="min-h-[360px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">
+      <SlidersHorizontal className="w-9 h-9 text-gray-300 dark:text-white/20 mb-3" />
+      <h2 className="text-sm font-bold text-gray-900 dark:text-white">Nenhum relatório personalizado</h2>
+      <p className="text-xs text-gray-500 dark:text-white/50 mt-1">Seus modelos salvos aparecerão aqui quando o construtor estiver disponível.</p>
+    </div>
+  </div>
+);

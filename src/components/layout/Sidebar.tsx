@@ -1,7 +1,9 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useAnalyticsModules } from '../../hooks/useAnalyticsModules';
 import { UserRole } from '../../types';
+import { REPORT_NAVIGATION_ITEMS, ReportsMenuIcon, type ReportNavigationItem } from '../../pages/reports/reportNavigation';
 import { LogoMark } from '../shared/brand';
 import {
   LayoutDashboard,
@@ -12,14 +14,17 @@ import {
   ShoppingCart,
   KanbanSquare,
   CalendarDays,
+  Bell,
   CreditCard,
-  BarChart3,
   FileText,
   Building2,
   Settings,
   Shield,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Clock3,
+  Lock,
   Sparkles
 } from 'lucide-react';
 
@@ -33,6 +38,7 @@ interface MenuItem {
   path: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: UserRole[];
+  children?: readonly ReportNavigationItem[];
 }
 
 interface MenuSection {
@@ -41,7 +47,16 @@ interface MenuSection {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
-  const { profile, subscription, hasRole } = useAuth();
+  const { subscription, hasRole } = useAuth();
+  const location = useLocation();
+  const canViewReports = hasRole(['admin', 'manager']);
+  const { modules: analyticsModules, isLoading: isLoadingAnalyticsModules } = useAnalyticsModules(canViewReports);
+  const isReportsRoute = location.pathname.startsWith('/relatorios') || location.pathname.startsWith('/reports');
+  const [isReportsOpen, setIsReportsOpen] = useState(isReportsRoute);
+
+  useEffect(() => {
+    if (isReportsRoute) setIsReportsOpen(true);
+  }, [isReportsRoute]);
 
   const menuSections: MenuSection[] = [
     {
@@ -56,6 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         { name: 'Vendas', path: '/sales', icon: ShoppingBag },
         { name: 'Pipeline', path: '/pipeline', icon: KanbanSquare },
         { name: 'Agenda', path: '/agenda', icon: CalendarDays },
+        { name: 'Notificações', path: '/notifications', icon: Bell },
         { name: 'Clientes', path: '/customers', icon: Users },
         { name: 'Estoque', path: '/inventory', icon: Package },
         { name: 'Fornecedores', path: '/suppliers', icon: Truck },
@@ -66,7 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Gestão',
       items: [
         { name: 'Financeiro', path: '/financial', icon: CreditCard, roles: ['admin', 'manager'] },
-        { name: 'Relatórios', path: '/reports', icon: BarChart3, roles: ['admin', 'manager'] },
+        { name: 'Relatórios', path: '/relatorios', icon: ReportsMenuIcon, roles: ['admin', 'manager'], children: REPORT_NAVIGATION_ITEMS },
         { name: 'Documentos', path: '/documents', icon: FileText },
       ],
     },
@@ -137,30 +153,91 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               {isCollapsed && <div className="border-t border-black/5 dark:border-white/5 my-2" />}
 
               <div className="space-y-1">
-                {visibleItems.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group rounded-xl ${
-                        isActive
-                          ? 'bg-gradient-to-r from-[#0B2551] to-[#00a8d8] text-white shadow-md shadow-[#00d2ff]/10'
-                          : 'hover:bg-black/[0.03] dark:hover:bg-white/5 text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white'
-                      }`
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <item.icon
-                          className={`w-5 h-5 shrink-0 transition-colors duration-200 ${
-                            isActive ? 'text-white' : 'text-gray-400 dark:text-white/60 group-hover:text-gray-900 dark:group-hover:text-white'
+                {visibleItems.map((item) => {
+                  if (item.children) {
+                    return (
+                      <div key={item.path}>
+                        <button
+                          type="button"
+                          aria-expanded={isReportsOpen}
+                          aria-controls="reports-sidebar-submenu"
+                          onClick={() => {
+                            if (isCollapsed) {
+                              onToggle();
+                              setIsReportsOpen(true);
+                              return;
+                            }
+                            setIsReportsOpen((current) => !current);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
+                            isReportsRoute
+                              ? 'bg-gradient-to-r from-[#0B2551] to-[#00a8d8] text-white shadow-md shadow-[#00d2ff]/10'
+                              : 'hover:bg-black/[0.03] dark:hover:bg-white/5 text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white'
                           }`}
-                        />
-                        {!isCollapsed && <span>{item.name}</span>}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
+                        >
+                          <item.icon className={`w-5 h-5 shrink-0 ${isReportsRoute ? 'text-white' : 'text-gray-400 dark:text-white/60 group-hover:text-gray-900 dark:group-hover:text-white'}`} />
+                          {!isCollapsed && (
+                            <>
+                              <span className="flex-1 text-left">{item.name}</span>
+                              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isReportsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                            </>
+                          )}
+                        </button>
+
+                        {!isCollapsed && isReportsOpen && (
+                          <div id="reports-sidebar-submenu" className="ml-5 mt-1 pl-3 border-l border-gray-200 dark:border-white/10 space-y-1">
+                            {item.children.map((child) => {
+                              const module = analyticsModules.find((candidate) => candidate.key === child.moduleKey);
+                              const accessStatus = module?.accessStatus || child.defaultAccessStatus || (isLoadingAnalyticsModules ? undefined : 'locked');
+                              const isLocked = accessStatus === 'locked';
+                              const isComingSoon = accessStatus === 'coming_soon';
+
+                              return (
+                                <NavLink
+                                  key={child.path}
+                                  to={child.path}
+                                  className={({ isActive }) =>
+                                    `flex items-center gap-2.5 min-h-9 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
+                                      isActive
+                                        ? 'bg-[#00a8d8]/10 text-[#007fa3] dark:text-[#53dcff]'
+                                        : 'text-gray-500 dark:text-white/50 hover:bg-black/[0.03] dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+                                    }`
+                                  }
+                                >
+                                  <child.icon className="w-4 h-4 shrink-0 opacity-80" aria-hidden="true" />
+                                  <span className="flex-1 text-left leading-tight">{child.name}</span>
+                                  {isLocked && <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" aria-label="Módulo bloqueado" />}
+                                  {isComingSoon && <Clock3 className="w-3.5 h-3.5 text-blue-400 shrink-0" aria-label="Em breve" />}
+                                </NavLink>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
+                          isActive
+                            ? 'bg-gradient-to-r from-[#0B2551] to-[#00a8d8] text-white shadow-md shadow-[#00d2ff]/10'
+                            : 'hover:bg-black/[0.03] dark:hover:bg-white/5 text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white'
+                        }`
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <item.icon className={`w-5 h-5 shrink-0 transition-colors duration-200 ${isActive ? 'text-white' : 'text-gray-400 dark:text-white/60 group-hover:text-gray-900 dark:group-hover:text-white'}`} />
+                          {!isCollapsed && <span>{item.name}</span>}
+                        </>
+                      )}
+                    </NavLink>
+                  );
+                })}
               </div>
             </div>
           );

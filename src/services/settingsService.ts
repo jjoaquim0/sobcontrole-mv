@@ -39,6 +39,7 @@ export const mapDbSettings = (db: any): CompanySettings => ({
   emailNotifications: db.email_notifications ?? db.emailNotifications ?? true,
   pushNotifications: db.push_notifications ?? db.pushNotifications ?? true,
   whatsappNotifications: db.whatsapp_notifications ?? db.whatsappNotifications ?? false,
+  smsNotifications: db.sms_notifications ?? db.smsNotifications ?? false,
   createdAt: db.created_at || db.createdAt,
   updatedAt: db.updated_at || db.updatedAt,
 });
@@ -76,6 +77,7 @@ export const getSettings = async (): Promise<CompanySettings> => {
     email_notifications: true,
     push_notifications: true,
     whatsapp_notifications: false,
+    sms_notifications: false,
   };
 
   const { data: created, error: insertError } = await supabase
@@ -100,6 +102,7 @@ export type UpdatableSettings = Partial<
     | 'emailNotifications'
     | 'pushNotifications'
     | 'whatsappNotifications'
+    | 'smsNotifications'
   >
 >;
 
@@ -116,6 +119,7 @@ export const updateSettings = async (data: UpdatableSettings): Promise<CompanySe
   if (data.emailNotifications !== undefined) dbPayload.email_notifications = data.emailNotifications;
   if (data.pushNotifications !== undefined) dbPayload.push_notifications = data.pushNotifications;
   if (data.whatsappNotifications !== undefined) dbPayload.whatsapp_notifications = data.whatsappNotifications;
+  if (data.smsNotifications !== undefined) dbPayload.sms_notifications = data.smsNotifications;
 
   await getSettings();
 

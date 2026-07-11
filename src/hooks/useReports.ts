@@ -78,37 +78,48 @@ const exportCSV = (data: Record<string, unknown>[], filename: string) => {
   URL.revokeObjectURL(url);
 };
 
-export const useReports = (period: ReportPeriod) => {
-  const dates = useMemo(() => getDateRange(period), [period.type, period.dateFrom, period.dateTo]);
+export type ReportQueryKey = 'overview' | 'dre' | 'sales' | 'financial' | 'inventory' | 'customer';
+
+const ALL_REPORT_QUERY_KEYS: readonly ReportQueryKey[] = ['overview', 'dre', 'sales', 'financial', 'inventory', 'customer'];
+
+export const useReports = (period: ReportPeriod, enabledReports: readonly ReportQueryKey[] = ALL_REPORT_QUERY_KEYS) => {
+  const dates = useMemo(() => getDateRange(period), [period]);
+  const isEnabled = (key: ReportQueryKey) => enabledReports.includes(key);
 
   const overviewQuery = useQuery({
     queryKey: ['reports', 'overview', dates],
     queryFn: () => getOverviewReport(dates.dateFrom, dates.dateTo),
+    enabled: isEnabled('overview'),
   });
 
   const dreQuery = useQuery({
     queryKey: ['reports', 'dre', dates],
     queryFn: () => getDREReport(dates.dateFrom, dates.dateTo),
+    enabled: isEnabled('dre'),
   });
 
   const salesQuery = useQuery({
     queryKey: ['reports', 'sales', dates],
     queryFn: () => getSalesReport(dates.dateFrom, dates.dateTo),
+    enabled: isEnabled('sales'),
   });
 
   const financialQuery = useQuery({
     queryKey: ['reports', 'financial', dates],
     queryFn: () => getFinancialReport(dates.dateFrom, dates.dateTo),
+    enabled: isEnabled('financial'),
   });
 
   const inventoryQuery = useQuery({
     queryKey: ['reports', 'inventory', dates],
     queryFn: () => getInventoryReport(dates.dateFrom, dates.dateTo),
+    enabled: isEnabled('inventory'),
   });
 
   const customerQuery = useQuery({
     queryKey: ['reports', 'customer', dates],
     queryFn: () => getCustomerReport(dates.dateFrom, dates.dateTo),
+    enabled: isEnabled('customer'),
   });
 
   return {

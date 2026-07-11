@@ -3,6 +3,8 @@ import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { PublicRoute } from './PublicRoute';
 import { PrivateRoute } from './PrivateRoute';
 import { RoleRoute } from './RoleRoute';
+import { AnalyticsModuleRoute } from './AnalyticsModuleRoute';
+import { LegacyReportsRedirect, ReportsRoleOutlet } from './ReportsRoutes';
 import { AppLayout } from '../components/layout/AppLayout';
 
 // Componentes das Páginas
@@ -14,12 +16,21 @@ import { Dashboard } from '../pages/dashboard';
 import { Sales, SaleDetailPage } from '../pages/sales';
 import { Pipeline } from '../pages/pipeline';
 import { Agenda } from '../pages/agenda';
+import { Notifications } from '../pages/notifications';
 import { Inventory, ProductDetailPage } from '../pages/inventory';
 import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
 import { Purchases, PurchaseDetailPage } from '../pages/purchases';
 import { Financial } from '../pages/financial';
-import { Reports } from '../pages/reports';
+import {
+  ReportsCustomPage,
+  ReportsCustomersPage,
+  ReportsFinancialPage,
+  ReportsIntelligencePage,
+  ReportsInventoryPage,
+  ReportsOverviewPage,
+  ReportsSalesPage,
+} from '../pages/reports';
 import { Documents } from '../pages/documents';
 import { Company } from '../pages/company';
 import { Settings } from '../pages/settings';
@@ -88,6 +99,10 @@ export const router = createBrowserRouter([
         element: <Agenda />,
       },
       {
+        path: 'notifications',
+        element: <Notifications />,
+      },
+      {
         path: 'customers',
         element: <Customers />,
       },
@@ -137,11 +152,42 @@ export const router = createBrowserRouter([
       },
       {
         path: 'reports',
-        element: (
-          <RoleRoute allowedRoles={['admin', 'manager']}>
-            <Reports />
-          </RoleRoute>
-        ),
+        element: <LegacyReportsRedirect />,
+      },
+      {
+        path: 'relatorios',
+        element: <ReportsRoleOutlet />,
+        children: [
+          { index: true, element: <Navigate to="visao-geral" replace /> },
+          {
+            path: 'visao-geral',
+            element: <AnalyticsModuleRoute moduleKey="dashboard_executivo"><ReportsOverviewPage /></AnalyticsModuleRoute>,
+          },
+          {
+            path: 'central-inteligencia',
+            element: <AnalyticsModuleRoute moduleKey="gestly_insights"><ReportsIntelligencePage /></AnalyticsModuleRoute>,
+          },
+          {
+            path: 'vendas-pipeline',
+            element: <AnalyticsModuleRoute moduleKey="sales_analytics"><ReportsSalesPage /></AnalyticsModuleRoute>,
+          },
+          {
+            path: 'clientes',
+            element: <AnalyticsModuleRoute moduleKey="customer_analytics"><ReportsCustomersPage /></AnalyticsModuleRoute>,
+          },
+          {
+            path: 'financeiro',
+            element: <AnalyticsModuleRoute moduleKey="financial_analytics"><ReportsFinancialPage /></AnalyticsModuleRoute>,
+          },
+          {
+            path: 'estoque-compras',
+            element: <AnalyticsModuleRoute moduleKey="inventory_analytics"><ReportsInventoryPage /></AnalyticsModuleRoute>,
+          },
+          {
+            path: 'personalizados',
+            element: <AnalyticsModuleRoute moduleKey="custom_reports"><ReportsCustomPage /></AnalyticsModuleRoute>,
+          },
+        ],
       },
       {
         path: 'documents',

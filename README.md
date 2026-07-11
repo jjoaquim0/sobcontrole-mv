@@ -185,7 +185,13 @@ src/
 - (*Em construção — página com UnderConstruction*)
 
 ### 10. Relatórios (Admin/Gerente)
-- (*Em construção — página com UnderConstruction*)
+- Item expansível na Sidebar com 7 rotas próprias: Visão Geral, Central de Inteligência, Vendas e Pipeline, Clientes, Financeiro, Estoque e Compras e Relatórios Personalizados
+- Visão Geral/Vendas/Clientes/Financeiro/Estoque: indicadores e gráficos (Recharts) por período e exportação em CSV; o DRE fica dentro da rota Financeiro
+- Central de Inteligência: alertas, oportunidades e ações sugeridas pela Gestly
+- Relatórios Personalizados aparece como "Em breve" até a liberação do construtor
+- 4 estados por módulo: Disponível, Contratado, Em breve e Bloqueado; itens bloqueados continuam visíveis com cadeado e CTA para planos
+- Acesso calculado por `resolveModuleAccess()` e validado novamente em cada rota antes de montar consultas; RLS restringe os dados por empresa
+- Links antigos `/reports?tab=<aba>` redirecionam para as novas rotas em `/relatorios/*`
 
 ### 11. Documentos
 - Upload e gerenciamento de arquivos
@@ -208,16 +214,33 @@ src/
 - Persistência de preferência
 - Transições suaves entre modos
 
+### 16. Kanban / Pipeline de Vendas
+- Board drag-and-drop por etapa (`pipeline_stages` configuráveis por empresa)
+- Negócios (`deals`) vinculados a cliente e responsável, com histórico de movimentação de etapa
+- Marcar como Ganho/Perdido, motivo de perda
+
+### 17. Agenda / Calendário
+- Visões de mês, semana e dia
+- Compromissos (reunião, tarefa, ligação, visita, lembrete) vinculados a cliente/negócio/responsável
+- Drag-and-drop no mês, indicador de atraso, checkbox de tarefa concluída
+
+### 18. Notificações Inteligentes
+- Central de notificações in-app (`/notifications`) com badge de não lidas e atualização em tempo real (Supabase Realtime)
+- Detecção automática de 9 cenários (compromisso próximo/atrasado, negócio parado, proposta vencendo, venda sem follow-up, cliente em risco, conta a receber/pagar vencendo, estoque baixo) + evento criado por colega (trigger)
+- Resumo, prioridade, justificativa, ação e texto sugeridos pela Gestly (motor determinístico baseado em regras/templates — ver seção dedicada abaixo)
+- Canais: in-app (sempre), push (Web Push, com consentimento explícito), e-mail (imediato ou resumo diário/semanal) e SMS (alta prioridade)
+- Preferências por usuário: canais, categorias, prioridade mínima por canal, horário de silêncio, frequência de resumo, telefone/e-mail de destino, consentimento por canal
+- Política geral por empresa em Configurações → Notificações (admin/manager)
+- Ações rápidas: enviar mensagem (copia texto sugerido), criar tarefa, agendar reunião, abrir cliente/negócio, alterar responsável, adiar, marcar como resolvida, arquivar
+- Fila de entrega com retentativas/backoff e histórico completo (`notification_deliveries`)
+
 ---
 
 ## Módulos Futuros (Roadmap)
 
 ### Fase 1 — Core (Prioridade Alta)
-- [ ] **Kanban / Pipeline de Vendas** — Visualização drag-and-drop do funil de vendas
-- [ ] **Agenda / Calendário** — Agendamento de reuniões, tarefas e compromissos com clientes
-- [ ] **Notificações Inteligentes** — Push, e-mail e SMS com ações sugeridas pela IA
 - [ ] **Assinaturas / Recorrências** — Cobranças recorrentes e gestão de assinaturas de clientes
-- [ ] **WhatsApp Integrado** — Envio e recebimento de mensagens via WhatsApp Business API
+- [ ] **WhatsApp Integrado** — Envio e recebimento de mensagens via WhatsApp Business API (inclui mensageria real com o cliente final — diferente das notificações internas do item 18 acima)
 
 ### Fase 2 — Inteligência Artificial
 - [ ] **Chatbot Gestly** — Assistente comercial via chat, tira dúvidas, sugere ações
@@ -225,7 +248,8 @@ src/
 - [ ] **Open Finance** — Conectar bancos dos clientes, visualizar saldos/extratos e categorizar transações automaticamente com IA
 
 ### Fase 3 — Analytics e Automação
-- [ ] **BI / Analytics Avançado** — Dashboards analíticos com gráficos interativos, exportação, insights automáticos
+- [x] **BI / Analytics Avançado (vitrine)** — Central de Inteligência em Relatórios: catálogo de módulos, controle de acesso por plano/add-on, RLS (Story 1.6)
+- [ ] **BI / Analytics Avançado (indicadores aprofundados)** — Funil de vendas por etapa, churn score, fluxo de caixa projetado, giro de estoque e demais indicadores descritos em cada módulo da Central de Inteligência ainda não têm implementação própria — hoje "Acessar análise" leva à aba equivalente já existente em Relatórios/Dashboard/Notificações (ver Story 1.6)
 - [ ] **Marketing / Automação** — E-mail marketing, disparo de campanhas, automação de follow-up com base em comportamento
 
 ### Fase 4 — Futuro (Longo Prazo)
@@ -246,6 +270,9 @@ src/
 /dashboard           → Painel executivo
 /sales               → Vendas (lista)
 /sales/:id           → Detalhe da venda
+/pipeline            → Kanban / Pipeline de vendas
+/agenda              → Agenda / Calendário
+/notifications       → Central de Notificações + Preferências
 /customers           → Clientes (lista)
 /customers/:id       → Detalhe do cliente
 /inventory           → Estoque (lista)
@@ -253,7 +280,14 @@ src/
 /suppliers           → Fornecedores
 /purchases           → Compras (admin/manager)
 /financial           → Financeiro (admin/manager)
-/reports             → Relatórios (admin/manager)
+/relatorios          → Relatórios (accordion, admin/manager)
+/relatorios/visao-geral
+/relatorios/central-inteligencia
+/relatorios/vendas-pipeline
+/relatorios/clientes
+/relatorios/financeiro
+/relatorios/estoque-compras
+/relatorios/personalizados
 /documents           → Documentos
 /company             → Minha Empresa (admin/manager)
 /settings            → Configurações (admin/manager)
@@ -394,6 +428,35 @@ VITE_SUPABASE_URL=https://seu-projeto.supabase.co
 VITE_SUPABASE_ANON_KEY=sua-chave-anon
 ```
 
+### Notificações Inteligentes — configuração de envio (opcional)
+
+A Central de Notificações (in-app) funciona imediatamente após as migrations, sem
+nenhuma configuração adicional. O envio real por push/e-mail/SMS depende de
+credenciais de terceiros que **não fazem parte deste repositório** e precisam
+ser configuradas como **secrets da Edge Function** (nunca no `.env` do
+frontend, nunca commitadas):
+
+```bash
+# Web Push (VAPID) — gere o par com: npx web-push generate-vapid-keys
+supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:contato@suaempresa.com
+
+# E-mail (Resend)
+supabase secrets set RESEND_API_KEY=... RESEND_FROM_EMAIL=notificacoes@seudominio.com
+
+# SMS (Twilio — referência genérica; qualquer provedor com API REST pode substituir)
+supabase secrets set TWILIO_ACCOUNT_SID=... TWILIO_AUTH_TOKEN=... TWILIO_FROM_NUMBER=...
+```
+
+A chave pública VAPID também precisa estar no frontend como
+`VITE_VAPID_PUBLIC_KEY` (ver `.env.example`) — ela é pública por natureza,
+diferente da chave privada.
+
+A Edge Function `process-notification-deliveries` processa a fila de envio
+(`notification_deliveries`) quando invocada; sem credenciais configuradas, ela
+falha graciosamente (erro registrado em `last_error`, visível no histórico de
+entrega) em vez de travar. Para automatizar a invocação periódica, agende-a no
+painel do Supabase (Edge Functions → Cron) ou via `pg_cron`/`pg_net`.
+
 ### Scripts Disponíveis
 
 | Comando | Descrição |
@@ -402,6 +465,7 @@ VITE_SUPABASE_ANON_KEY=sua-chave-anon
 | `npm run build` | TypeScript check + build de produção |
 | `npm run preview` | Preview do build de produção |
 | `npm run lint` | ESLint em todos os arquivos TS/TSX |
+| `npm test` | Testes unitários (Vitest + Testing Library) |
 
 ### Banco de Dados
 

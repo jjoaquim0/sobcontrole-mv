@@ -1,7 +1,9 @@
-import React from 'react';
-import { ReportsPage } from './ReportsPage';
-
-export const Reports: React.FC = () => {
-  return <ReportsPage />;
-};
-export default Reports;
+export {
+  ReportsCustomPage,
+  ReportsCustomersPage,
+  ReportsFinancialPage,
+  ReportsIntelligencePage,
+  ReportsInventoryPage,
+  ReportsOverviewPage,
+  ReportsSalesPage,
+} from './ReportsPage';

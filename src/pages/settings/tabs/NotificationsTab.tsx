@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Bell, Mail, Smartphone, MessageCircle } from 'lucide-react';
+import { Loader2, Bell, Mail, Smartphone, MessageCircle, MessageSquare } from 'lucide-react';
 import { useSettings } from '../../../hooks/useSettings';
 
 interface ToggleRowProps {
@@ -59,20 +59,27 @@ export const NotificationsTab: React.FC = () => {
 
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(true);
+  const [smsNotifications, setSmsNotifications] = useState(false);
 
   useEffect(() => {
     if (settings) {
       setEmailNotifications(settings.emailNotifications);
       setPushNotifications(settings.pushNotifications);
+      setSmsNotifications(settings.smsNotifications);
     }
   }, [settings]);
 
-  const handleToggle = async (field: 'emailNotifications' | 'pushNotifications', value: boolean) => {
+  const handleToggle = async (
+    field: 'emailNotifications' | 'pushNotifications' | 'smsNotifications',
+    value: boolean
+  ) => {
     if (field === 'emailNotifications') setEmailNotifications(value);
     if (field === 'pushNotifications') setPushNotifications(value);
+    if (field === 'smsNotifications') setSmsNotifications(value);
     await updateSettings({ [field]: value }).catch(() => {
       if (field === 'emailNotifications') setEmailNotifications(!value);
       if (field === 'pushNotifications') setPushNotifications(!value);
+      if (field === 'smsNotifications') setSmsNotifications(!value);
     });
   };
 
@@ -84,7 +91,10 @@ export const NotificationsTab: React.FC = () => {
         </span>
         <div>
           <h2 className="text-lg font-bold text-gray-900 dark:text-white">Notificações</h2>
-          <p className="text-sm text-gray-500 dark:text-white/50">Escolha como deseja ser avisado</p>
+          <p className="text-sm text-gray-500 dark:text-white/50">
+            Política geral da empresa por canal. Cada usuário ajusta suas próprias preferências (categorias, horário de
+            silêncio, prioridade mínima) na Central de Notificações.
+          </p>
         </div>
         {isSavingSettings && <Loader2 className="w-4 h-4 animate-spin text-gray-400 ml-auto" />}
       </div>
@@ -108,6 +118,13 @@ export const NotificationsTab: React.FC = () => {
             description="Alertas em tempo real diretamente no navegador."
             checked={pushNotifications}
             onChange={(value) => handleToggle('pushNotifications', value)}
+          />
+          <ToggleRow
+            icon={<MessageSquare className="w-5 h-5" />}
+            title="Notificações por SMS"
+            description="Alertas de alta prioridade por SMS. Cada usuário precisa cadastrar o telefone e autorizar o recebimento."
+            checked={smsNotifications}
+            onChange={(value) => handleToggle('smsNotifications', value)}
           />
           <ToggleRow
             icon={<MessageCircle className="w-5 h-5" />}

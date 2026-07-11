@@ -1,8 +1,9 @@
 import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useThemeStore } from '../../store/themeStore';
-import { Sun, Moon, Bell, LogOut, User as UserIcon } from 'lucide-react';
+import { Sun, Moon, LogOut, User as UserIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { NotificationBell } from '../notifications/NotificationBell';
 
 export const Header: React.FC = () => {
   const { profile, company, subscription, signOut } = useAuth();
@@ -59,13 +60,7 @@ export const Header: React.FC = () => {
       {/* Right: Actions and User details */}
       <div className="relative flex items-center gap-4">
         {/* Notifications */}
-        <button
-          type="button"
-          className="p-2 rounded-xl text-gray-500 hover:text-[#00a8d8] dark:text-gray-400 dark:hover:text-[#00d2ff] hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200"
-          title="Notificações"
-        >
-          <Bell className="w-5 h-5" />
-        </button>
+        <NotificationBell />
 
         {/* Theme Toggle */}
         <button

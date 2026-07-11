@@ -193,7 +193,7 @@ export const DashboardPage: React.FC = () => {
             </p>
           </div>
           <Link
-            to="/reports"
+            to="/relatorios/visao-geral"
             className="inline-flex items-center gap-1.5 rounded-full border border-black/10 dark:border-white/15 text-gray-700 dark:text-white text-xs font-medium px-4 py-2 hover:bg-black/[0.03] dark:hover:bg-white/5 transition-all duration-200 shrink-0"
           >
             Ver relatório completo
@@ -457,7 +457,7 @@ export const DashboardPage: React.FC = () => {
             { label: 'Nova Venda', icon: Zap, className: 'from-[#0B2551] to-[#00d2ff]', path: '/sales' },
             { label: 'Novo Produto', icon: Package, className: 'from-blue-500 to-indigo-600', path: '/inventory' },
             { label: 'Novo Cliente', icon: Users, className: 'from-purple-500 to-violet-600', path: '/customers' },
-            { label: 'Ver Relatórios', icon: BarChart3, className: 'from-amber-500 to-orange-600', path: '/reports' },
+            { label: 'Ver Relatórios', icon: BarChart3, className: 'from-amber-500 to-orange-600', path: '/relatorios/visao-geral' },
           ].map((action) => (
             <button
               key={action.label}

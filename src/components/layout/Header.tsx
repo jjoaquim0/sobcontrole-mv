@@ -38,7 +38,7 @@ export const Header: React.FC = () => {
   };
 
   return (
-    <header className="panel-glass border-b border-black/5 dark:border-white/10 h-16 px-6 flex items-center justify-between shrink-0 transition-colors duration-300">
+    <header className="panel-glass header-seamless !overflow-visible z-30 h-16 px-6 flex items-center justify-between shrink-0 transition-colors duration-300">
       {/* Left: Company details */}
       <div className="relative flex items-center gap-3">
         {company ? (

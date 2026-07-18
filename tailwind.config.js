@@ -29,6 +29,12 @@ export default {
         themeBorder: {
           light: '#e5e7eb',
           dark: 'rgba(255,255,255,0.06)',
+        },
+        themeSidebar: {
+          light: '#f8fafc',
+          dark: '#0a0b0e',
+          dividerLight: 'rgba(11,37,81,0.06)',
+          dividerDark: 'rgba(164,244,253,0.05)',
         }
       },
       fontFamily: {

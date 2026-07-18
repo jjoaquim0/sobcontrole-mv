@@ -268,6 +268,18 @@ export const getDealHistory = async (dealId: string): Promise<DealStageHistoryEn
   }));
 };
 
+export const deleteDeal = async (id: string): Promise<void> => {
+  const companyId = requireCompanyId();
+
+  const { error } = await supabase
+    .from('deals')
+    .delete()
+    .eq('id', id)
+    .eq('company_id', companyId);
+
+  if (error) throw error;
+};
+
 export const closeDeal = async (id: string, status: 'won' | 'lost', lostReason?: string): Promise<Deal> => {
   const companyId = requireCompanyId();
 

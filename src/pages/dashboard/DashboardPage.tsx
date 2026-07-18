@@ -89,6 +89,11 @@ export const DashboardPage: React.FC = () => {
   const lowStockVal = inventory.data?.lowStockCount ?? 0;
   const weeklyTotal = weeklySales.data?.reduce((sum, d) => sum + d.value, 0) ?? 0;
   const activeDays = weeklySales.data?.filter((d) => d.value > 0).length ?? 0;
+  const overdueReceive = financial.data?.overdueReceive ?? 0;
+  const overduePay = financial.data?.overduePay ?? 0;
+  const areNextActionsLoading = inventory.isLoading || financial.isLoading;
+  const hasNextActionsError = inventory.isError || financial.isError;
+  const hasNextActions = lowStockVal > 0 || overdueReceive > 0 || overduePay > 0;
 
   const handleExportReport = () => {
     toast.success('Relatório gerado! O download iniciará em instantes.');
@@ -447,6 +452,111 @@ export const DashboardPage: React.FC = () => {
         </motion.div>
       </div>
 
+      {/* Next Actions */}
+      <motion.div variants={itemVariants} className="panel-glass rounded-2xl p-5 transition-all duration-300">
+        <div className="mb-4">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 uppercase tracking-wider">
+            Próximas Ações
+          </h3>
+          <p className="text-xs text-gray-500 dark:text-white/50 mt-1">
+            Prioridades identificadas a partir do estoque e das contas vencidas.
+          </p>
+        </div>
+
+        {areNextActionsLoading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3" role="status" aria-label="Carregando próximas ações">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="h-36 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] animate-pulse" />
+            ))}
+          </div>
+        ) : hasNextActionsError ? (
+          <div className="min-h-28 flex flex-col items-center justify-center text-center rounded-xl bg-red-50/70 dark:bg-red-500/[0.06] px-5 py-6" role="alert">
+            <AlertCircle className="w-5 h-5 text-red-500 mb-2" aria-hidden="true" />
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Não foi possível analisar as próximas ações</p>
+            <p className="text-xs text-gray-500 dark:text-white/50 mt-1">Atualize a página para tentar carregar os sinais novamente.</p>
+          </div>
+        ) : hasNextActions ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {lowStockVal > 0 && (
+              <article className="rounded-xl border border-amber-200/70 dark:border-amber-500/15 bg-amber-50/70 dark:bg-amber-500/[0.06] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <Package className="w-4 h-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">Atenção</span>
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Revise o estoque baixo</h4>
+                    <p className="text-xs text-gray-600 dark:text-white/55 leading-5 mt-1">
+                      {lowStockVal} produto{lowStockVal === 1 ? '' : 's'} na quantidade mínima ou abaixo dela.
+                    </p>
+                    <Link
+                      to="/inventory"
+                      className="inline-flex items-center gap-1 mt-3 rounded text-xs font-semibold text-[#008eb8] dark:text-[#41cfff] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8]"
+                    >
+                      Abrir estoque <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            )}
+
+            {overdueReceive > 0 && (
+              <article className="rounded-xl border border-red-200/70 dark:border-red-500/15 bg-red-50/70 dark:bg-red-500/[0.06] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                    <TrendingUp className="w-4 h-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Prioridade alta</span>
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Acompanhe os recebimentos vencidos</h4>
+                    <p className="text-xs text-gray-600 dark:text-white/55 leading-5 mt-1">
+                      {formatCurrency(overdueReceive)} aguardando recebimento após o vencimento.
+                    </p>
+                    <Link
+                      to="/financial"
+                      className="inline-flex items-center gap-1 mt-3 rounded text-xs font-semibold text-[#008eb8] dark:text-[#41cfff] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8]"
+                    >
+                      Ver contas <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            )}
+
+            {overduePay > 0 && (
+              <article className="rounded-xl border border-red-200/70 dark:border-red-500/15 bg-red-50/70 dark:bg-red-500/[0.06] p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                    <TrendingDown className="w-4 h-4" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-400">Prioridade alta</span>
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white mt-0.5">Regularize os pagamentos vencidos</h4>
+                    <p className="text-xs text-gray-600 dark:text-white/55 leading-5 mt-1">
+                      {formatCurrency(overduePay)} em pagamentos com prazo ultrapassado.
+                    </p>
+                    <Link
+                      to="/financial"
+                      className="inline-flex items-center gap-1 mt-3 rounded text-xs font-semibold text-[#008eb8] dark:text-[#41cfff] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8]"
+                    >
+                      Abrir financeiro <ArrowRight className="w-3 h-3" aria-hidden="true" />
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            )}
+          </div>
+        ) : (
+          <div className="min-h-28 flex flex-col items-center justify-center text-center rounded-xl bg-black/[0.02] dark:bg-white/[0.025] px-5 py-6">
+            <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-2">
+              <Zap className="w-4 h-4" aria-hidden="true" />
+            </div>
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-200">Nenhuma ação crítica entre os sinais monitorados</p>
+            <p className="text-xs text-gray-500 dark:text-white/50 mt-1">Não há estoque baixo nem valores vencidos a receber ou pagar.</p>
+          </div>
+        )}
+      </motion.div>
+
       {/* Quick Actions */}
       <motion.div variants={itemVariants} className="panel-glass rounded-2xl p-5 transition-all duration-300 hover:shadow-lg">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 uppercase tracking-wider mb-4">
@@ -454,19 +564,19 @@ export const DashboardPage: React.FC = () => {
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Nova Venda', icon: Zap, className: 'from-[#0B2551] to-[#00d2ff]', path: '/sales' },
-            { label: 'Novo Produto', icon: Package, className: 'from-blue-500 to-indigo-600', path: '/inventory' },
-            { label: 'Novo Cliente', icon: Users, className: 'from-purple-500 to-violet-600', path: '/customers' },
-            { label: 'Ver Relatórios', icon: BarChart3, className: 'from-amber-500 to-orange-600', path: '/relatorios/visao-geral' },
+            { label: 'Nova Venda', icon: ShoppingCart, path: '/sales' },
+            { label: 'Novo Produto', icon: Package, path: '/inventory' },
+            { label: 'Novo Cliente', icon: Users, path: '/customers' },
+            { label: 'Ver Relatórios', icon: BarChart3, path: '/relatorios/visao-geral' },
           ].map((action) => (
             <button
               key={action.label}
+              type="button"
               onClick={() => navigate(action.path)}
-              className={`group relative overflow-hidden rounded-xl p-4 bg-gradient-to-br ${action.className} text-white transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98]`}
+              className="group min-h-20 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.015] dark:bg-white/[0.025] p-4 text-gray-700 dark:text-gray-200 transition-all duration-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8]"
             >
-              <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-              <div className="relative z-10 flex flex-col items-center gap-2">
-                <action.icon className="w-6 h-6" />
+              <div className="flex flex-col items-center gap-2">
+                <action.icon className="w-5 h-5 text-[#00a8d8] transition-transform duration-200 group-hover:scale-105" aria-hidden="true" />
                 <span className="text-xs font-semibold">{action.label}</span>
               </div>
             </button>

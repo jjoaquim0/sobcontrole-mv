@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, Handshake, Trophy, XOctagon, History } from 'lucide-react';
+import { X, Loader2, Handshake, Trophy, XOctagon, History, Trash2 } from 'lucide-react';
 import { Deal, PipelineStage } from '../../../types';
 import { useCustomers } from '../../../hooks/useCustomers';
 import { useSettings } from '../../../hooks/useSettings';
@@ -43,6 +43,8 @@ export interface DealModalProps {
   onMarkWon: () => Promise<void>;
   onMarkLost: (reason?: string) => Promise<void>;
   isClosing?: boolean;
+  onDelete?: () => void | Promise<void>;
+  isDeleting?: boolean;
 }
 
 export const DealModal: React.FC<DealModalProps> = ({
@@ -56,6 +58,8 @@ export const DealModal: React.FC<DealModalProps> = ({
   onMarkWon,
   onMarkLost,
   isClosing = false,
+  onDelete,
+  isDeleting = false,
 }) => {
   const { customers } = useCustomers({ status: 'active' });
   const { teamMembers } = useSettings();
@@ -112,16 +116,22 @@ export const DealModal: React.FC<DealModalProps> = ({
   }, [deal, isOpen, defaultStageId, stages, currentProfileId, reset]);
 
   const onSubmit = async (formValues: DealForm) => {
-    await onSave({
-      title: formValues.title,
-      customerId: formValues.customerId,
-      ownerId: formValues.ownerId,
-      stageId: formValues.stageId,
-      value: formValues.value,
-      expectedCloseDate: formValues.expectedCloseDate || undefined,
-      notes: formValues.notes,
-    });
-    onClose();
+    try {
+      await onSave({
+        title: formValues.title,
+        customerId: formValues.customerId,
+        ownerId: formValues.ownerId,
+        stageId: formValues.stageId,
+        value: formValues.value,
+        expectedCloseDate: formValues.expectedCloseDate || undefined,
+        notes: formValues.notes,
+      });
+      onClose();
+    } catch {
+      // Erro já é comunicado via toast pelas mutations (updateDeal/moveDeal/
+      // createDeal); o modal permanece aberto (onClose não é chamado) para
+      // que o usuário possa corrigir e tentar novamente.
+    }
   };
 
   const handleMarkLostConfirm = async () => {
@@ -134,6 +144,12 @@ export const DealModal: React.FC<DealModalProps> = ({
     onClose();
   };
 
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    await onDelete();
+    onClose();
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -142,7 +158,7 @@ export const DealModal: React.FC<DealModalProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={isSaving || isClosing ? undefined : onClose}
+            onClick={isSaving || isClosing || isDeleting ? undefined : onClose}
             className="fixed inset-0 bg-black/55 backdrop-blur-sm"
           />
 
@@ -353,23 +369,39 @@ export const DealModal: React.FC<DealModalProps> = ({
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 border-t border-gray-100 dark:border-white/5 pt-4 mt-2">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={isSaving}
-                  className="border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors duration-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="bg-[#10b981] hover:bg-[#059669] text-white rounded-xl px-5 py-2.5 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200 shadow-md shadow-emerald-500/10 disabled:opacity-50"
-                >
-                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {isSaving ? 'Salvando...' : deal ? 'Salvar Alterações' : 'Criar Negócio'}
-                </button>
+              <div className="flex justify-between items-center gap-3 border-t border-gray-100 dark:border-white/5 pt-4 mt-2">
+                {deal && onDelete ? (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={isSaving || isClosing || isDeleting}
+                    className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl px-3 py-2.5 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200 disabled:opacity-50"
+                  >
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    Excluir oportunidade
+                  </button>
+                ) : (
+                  <span />
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isSaving || isDeleting}
+                    className="border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 rounded-xl px-4 py-2.5 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors duration-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving || isDeleting}
+                    className="bg-[#10b981] hover:bg-[#059669] text-white rounded-xl px-5 py-2.5 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200 shadow-md shadow-emerald-500/10 disabled:opacity-50"
+                  >
+                    {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {isSaving ? 'Salvando...' : deal ? 'Salvar Alterações' : 'Criar Negócio'}
+                  </button>
+                </div>
               </div>
             </form>
           </motion.div>

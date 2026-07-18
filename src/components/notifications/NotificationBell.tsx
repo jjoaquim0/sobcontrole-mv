@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useNotificationsRealtime, useUnreadCount } from '../../hooks/useNotifications';
 import { NotificationDropdown } from './NotificationDropdown';
@@ -8,6 +8,15 @@ export const NotificationBell: React.FC = () => {
   const { data: unreadCount } = useUnreadCount();
   useNotificationsRealtime();
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   return (
     <div className="relative">
       <button
@@ -15,6 +24,9 @@ export const NotificationBell: React.FC = () => {
         onClick={() => setIsOpen((prev) => !prev)}
         className="relative p-2 rounded-xl text-gray-500 hover:text-[#00a8d8] dark:text-gray-400 dark:hover:text-[#00d2ff] hover:bg-black/5 dark:hover:bg-white/5 transition-all duration-200"
         title="Notificações"
+        aria-label={unreadCount ? `Notificações (${unreadCount} não lida${unreadCount > 1 ? 's' : ''})` : 'Notificações'}
+        aria-haspopup="true"
+        aria-expanded={isOpen}
       >
         <Bell className="w-5 h-5" />
         {!!unreadCount && unreadCount > 0 && (

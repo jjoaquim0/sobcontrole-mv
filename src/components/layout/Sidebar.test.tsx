@@ -72,3 +72,21 @@ describe('Sidebar reports accordion', () => {
     expect(screen.queryByRole('button', { name: 'Relatórios' })).not.toBeInTheDocument();
   });
 });
+
+describe('Sidebar surface', () => {
+  it('aplica o token de superfície nos temas claro e escuro', () => {
+    renderSidebar();
+
+    const sidebar = screen.getByRole('complementary');
+
+    expect(sidebar).toHaveClass(
+      'bg-themeSidebar-light',
+      'dark:bg-themeSidebar-dark'
+    );
+    expect(sidebar.querySelector('.sidebar-divider')).toHaveClass(
+      'w-px',
+      'bg-themeSidebar-dividerLight',
+      'dark:bg-themeSidebar-dividerDark'
+    );
+  });
+});

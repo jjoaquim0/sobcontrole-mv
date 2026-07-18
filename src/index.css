@@ -97,6 +97,16 @@
   );
 }
 
+/* Header sem contorno: preserva a superfície glass, mas elimina a linha
+   horizontal e a sombra que separavam o topo do conteúdo principal. */
+.panel-glass.header-seamless {
+  box-shadow: none;
+}
+
+.panel-glass.header-seamless::before {
+  display: none;
+}
+
 /* Landing page (Gestly marketing) styles */
 .liquid-glass {
   background: rgba(255, 255, 255, 0.01);

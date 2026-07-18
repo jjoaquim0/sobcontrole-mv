@@ -12,6 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { StatCard } from '../../components/shared/StatCard';
+import { ConfirmModal } from '../../components/shared/ConfirmModal';
 import { PipelineColumn } from './components/PipelineColumn';
 import { DealCardOverlay } from './components/DealCard';
 import { DealModal, DealSavePayload } from './components/DealModal';
@@ -31,6 +32,7 @@ export const PipelinePage: React.FC = () => {
   const [selectedDeal, setSelectedDeal] = useState<Deal | undefined>(undefined);
   const [createStageId, setCreateStageId] = useState<string | undefined>(undefined);
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Deal | undefined>(undefined);
 
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedSearch(searchInput), 300);
@@ -46,7 +48,7 @@ export const PipelinePage: React.FC = () => {
   const { stages, isLoading: isStagesLoading } = usePipelineStages();
   const { deals, isLoading: isDealsLoading, isError, refetch } = useDeals(filters);
   const { teamMembers } = useSettings();
-  const { createDeal, isCreating, updateDeal, isUpdating, moveDeal, closeDeal, isClosing } = useDealMutations(filters);
+  const { createDeal, isCreating, updateDeal, isUpdating, moveDeal, closeDeal, isClosing, deleteDeal, isDeleting } = useDealMutations(filters);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -90,7 +92,19 @@ export const PipelinePage: React.FC = () => {
 
   const handleSaveDeal = async (data: DealSavePayload) => {
     if (selectedDeal) {
-      await updateDeal({ id: selectedDeal.id, data });
+      const { stageId, ...updateFields } = data;
+      await updateDeal({ id: selectedDeal.id, data: updateFields });
+
+      // O <select> de Etapa já usa o stageId real, mas updateDeal() nunca
+      // gravou stage_id (ver Dev Notes da story 1.9) - por isso a troca de
+      // etapa é feita por uma chamada separada a moveDeal, que reaproveita
+      // 100% da lógica já existente de posição/histórico/rollback do
+      // drag-and-drop, em vez de duplicá-la aqui.
+      if (stageId !== selectedDeal.stageId) {
+        const targetStageDeals = dealsByStage[stageId] || [];
+        const maxPosition = targetStageDeals.reduce((max, d) => Math.max(max, d.position), -1);
+        await moveDeal({ id: selectedDeal.id, toStageId: stageId, position: maxPosition + 1 });
+      }
     } else {
       await createDeal(data);
     }
@@ -104,6 +118,24 @@ export const PipelinePage: React.FC = () => {
   const handleMarkLost = async (reason?: string) => {
     if (!selectedDeal) return;
     await closeDeal({ id: selectedDeal.id, status: 'lost', lostReason: reason });
+  };
+
+  const handleRequestDelete = () => {
+    if (!selectedDeal) return;
+    setDeleteTarget(selectedDeal);
+    setIsDealModalOpen(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await deleteDeal(deleteTarget.id);
+      setDeleteTarget(undefined);
+    } catch {
+      // Erro já é comunicado via toast pela mutation (usePipeline.deleteDeal);
+      // deleteTarget permanece definido para manter o diálogo aberto e
+      // permitir nova tentativa, sem deixar a rejeição sem tratamento.
+    }
   };
 
   const handleClearFilters = () => {
@@ -318,6 +350,19 @@ export const PipelinePage: React.FC = () => {
         onMarkWon={handleMarkWon}
         onMarkLost={handleMarkLost}
         isClosing={isClosing}
+        onDelete={selectedDeal ? handleRequestDelete : undefined}
+        isDeleting={isDeleting}
+      />
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="Excluir oportunidade"
+        message={`Tem certeza que deseja excluir "${deleteTarget?.title}"? Esta ação removerá definitivamente esta oportunidade do pipeline e não pode ser desfeita.`}
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(undefined)}
+        isLoading={isDeleting}
+        confirmText="Excluir oportunidade"
+        variant="danger"
       />
     </div>
   );

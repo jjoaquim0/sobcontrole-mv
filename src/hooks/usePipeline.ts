@@ -6,6 +6,7 @@ import {
   updateDeal,
   moveDealStage,
   closeDeal,
+  deleteDeal,
   getDealHistory,
   DealFilters,
   UpdateDealInput,
@@ -124,6 +125,20 @@ export const useDealMutations = (filters?: DealFilters) => {
     }
   });
 
+  // Exclusão é destrutiva e irreversível: diferente de moveMutation (reversível
+  // por natureza), o card só sai da tela depois que o backend confirma - sem
+  // atualização otimista aqui, mesmo padrão de useAgenda.deleteMutation.
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteDeal(id),
+    onSuccess: () => {
+      invalidateAll();
+      toast.success('Oportunidade excluída com sucesso!');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Erro ao excluir oportunidade.');
+    }
+  });
+
   return {
     createDeal: createMutation.mutateAsync,
     isCreating: createMutation.isPending,
@@ -135,5 +150,8 @@ export const useDealMutations = (filters?: DealFilters) => {
 
     closeDeal: closeMutation.mutateAsync,
     isClosing: closeMutation.isPending,
+
+    deleteDeal: deleteMutation.mutateAsync,
+    isDeleting: deleteMutation.isPending,
   };
 };

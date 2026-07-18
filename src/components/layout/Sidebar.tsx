@@ -102,11 +102,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
   return (
     <aside
-      className={`relative h-screen flex flex-col justify-between z-20 shrink-0 transition-all duration-300 ${
+      className={`relative h-screen flex flex-col justify-between z-20 shrink-0 transition-all duration-300 bg-themeSidebar-light dark:bg-themeSidebar-dark ${
         isCollapsed ? 'w-20' : 'w-64'
       }`}
     >
-      <div className="panel-glass absolute inset-0 border-r border-black/5 dark:border-white/10" />
+      <div className="panel-glass absolute inset-0" />
+      <div
+        aria-hidden="true"
+        className="sidebar-divider pointer-events-none absolute inset-y-0 right-0 z-10 w-px bg-themeSidebar-dividerLight dark:bg-themeSidebar-dividerDark"
+      />
 
       {/* Header / Logo */}
       <div className="relative p-5 flex items-center justify-between border-b border-black/5 dark:border-white/10 h-16 shrink-0">

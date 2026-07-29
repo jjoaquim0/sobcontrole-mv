@@ -1085,3 +1085,68 @@ VALUES
   (gen_random_uuid(), NULL, NULL, 'push', 'Notificação padrão (push)',
    NULL, '{{title}}|{{message}}', true)
 ON CONFLICT DO NOTHING;
+
+-- Story 1.15 — Previsão de Fluxo de Caixa
+-- Índices para as consultas de saldo realizado (status = 'paid') e
+-- lançamentos em aberto até o fim do período (company_id + status + due_date).
+-- Também aplicado via supabase/migrations/20260719120000_cash_flow_forecast_indexes.sql
+CREATE INDEX IF NOT EXISTS idx_account_receivables_company_status_due
+  ON account_receivables(company_id, status, due_date);
+
+CREATE INDEX IF NOT EXISTS idx_account_payables_company_status_due
+  ON account_payables(company_id, status, due_date);
+
+-- Story 1.16 — Recomendações de Estoque e Compras
+-- As recomendações são calculadas em tempo real a partir de products +
+-- sale_items + purchase_items já existentes. Estas duas tabelas persistem
+-- apenas as ações do usuário (dispensar/adiar/resolver), com auditoria
+-- append-only — nunca apagar recomendações anteriores sem histórico.
+-- Também aplicado via supabase/migrations/20260719130000_stock_recommendations_schema.sql
+CREATE TABLE IF NOT EXISTS stock_recommendation_states (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE NOT NULL,
+    recommendation_type TEXT NOT NULL, -- 'reposicao', 'estoque_parado'
+    status TEXT NOT NULL DEFAULT 'active', -- 'active', 'dismissed', 'postponed', 'resolved'
+    postponed_until TIMESTAMPTZ,
+    updated_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT stock_recommendation_states_unique UNIQUE (company_id, product_id, recommendation_type),
+    CONSTRAINT stock_recommendation_states_type_check CHECK (recommendation_type IN ('reposicao', 'estoque_parado')),
+    CONSTRAINT stock_recommendation_states_status_check CHECK (status IN ('active', 'dismissed', 'postponed', 'resolved'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_recommendation_states_company_status
+  ON stock_recommendation_states(company_id, status);
+
+ALTER TABLE stock_recommendation_states ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acesso total dos membros da empresa aos estados de recomendação" ON stock_recommendation_states
+FOR ALL USING (company_id = get_user_company_id());
+
+CREATE TABLE IF NOT EXISTS stock_recommendation_actions (
+    id UUID PRIMARY KEY,
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE NOT NULL,
+    recommendation_type TEXT NOT NULL,
+    action TEXT NOT NULL, -- 'dismissed', 'postponed', 'resolved'
+    reason TEXT,
+    snapshot_priority TEXT,
+    snapshot_current_quantity NUMERIC(12, 3),
+    snapshot_coverage_days NUMERIC(12, 2),
+    performed_by UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    performed_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    CONSTRAINT stock_recommendation_actions_type_check CHECK (recommendation_type IN ('reposicao', 'estoque_parado')),
+    CONSTRAINT stock_recommendation_actions_action_check CHECK (action IN ('dismissed', 'postponed', 'resolved'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_recommendation_actions_company_product
+  ON stock_recommendation_actions(company_id, product_id, performed_at DESC);
+
+ALTER TABLE stock_recommendation_actions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Acesso total dos membros da empresa ao historico de recomendacoes" ON stock_recommendation_actions
+FOR ALL USING (company_id = get_user_company_id());
+
+REVOKE ALL ON stock_recommendation_states, stock_recommendation_actions FROM anon;

@@ -3,11 +3,20 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import Navbar from './components/Navbar';
 import Hero from './components/Hero';
+import AllInOne from './components/AllInOne';
 import Inbox from './components/Inbox';
 import FeatureTriage from './components/FeatureTriage';
+import Modules from './components/Modules';
+import GestlyHighlight from './components/GestlyHighlight';
+import ValueFlow from './components/ValueFlow';
 import LogoCloud from './components/LogoCloud';
+import TargetAudience from './components/TargetAudience';
 import Testimonials from './components/Testimonials';
+import Benefits from './components/Benefits';
+import ProductPreview from './components/ProductPreview';
+import Security from './components/Security';
 import Pricing from './components/Pricing';
+import FAQ from './components/FAQ';
 import FinalCTA from './components/FinalCTA';
 
 export const Landing: React.FC = () => {
@@ -32,11 +41,20 @@ export const Landing: React.FC = () => {
       <div className="relative z-10">
         <Navbar />
         <Hero />
+        <AllInOne />
         <Inbox />
         <FeatureTriage />
+        <Modules />
+        <GestlyHighlight />
+        <ValueFlow />
         <LogoCloud />
+        <TargetAudience />
         <Testimonials />
+        <Benefits />
+        <ProductPreview />
+        <Security />
         <Pricing />
+        <FAQ />
         <FinalCTA />
       </div>
     </div>

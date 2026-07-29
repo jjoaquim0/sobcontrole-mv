@@ -12,7 +12,13 @@ export type TransactionStatus = 'paid' | 'pending' | 'late' | 'canceled';
 
 export type FinancialCategoryType = 'revenue' | 'expense';
 
-export type DocumentStatus = 'active' | 'archived';
+export type DocumentStatus = 'active' | 'archived' | 'deleted';
+
+export type DocumentVisibility = 'private' | 'company' | 'restricted';
+
+export type DocumentAccessLevel = 'none' | 'view' | 'download' | 'edit' | 'admin';
+
+export type DocumentRelatedType = 'customer' | 'supplier' | 'sale' | 'purchase' | 'product' | 'deal' | 'company';
 
 export type DealStatus = 'open' | 'won' | 'lost';
 
@@ -225,21 +231,76 @@ export interface Document {
   companyId: string;
   name: string;
   originalName: string;
-  url: string;
+  description?: string;
   category: DocumentCategory;
   mimeType: string;
   size: number; // em bytes
   storagePath: string;
-  relatedType?: 'sale' | 'purchase' | 'customer' | 'supplier';
+  relatedType?: DocumentRelatedType;
   relatedId?: string;
   status: DocumentStatus;
+  visibility: DocumentVisibility;
+  ownerId?: string;
+  ownerName?: string;
   uploadedBy?: string;
   uploadedByName?: string;
+  currentVersionId?: string;
+  versionCount: number;
+  currentUserPermission?: DocumentAccessLevel;
+  deletedAt?: string;
+  deletedBy?: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export type DocumentCategory = 'nota_fiscal' | 'contrato' | 'boleto' | 'recibo' | 'empresa' | 'cliente' | 'fornecedor' | 'outros';
+
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  companyId: string;
+  versionNumber: number;
+  originalName: string;
+  storagePath: string;
+  mimeType: string;
+  size: number;
+  changeComment?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface DocumentPermission {
+  id: string;
+  documentId: string;
+  companyId: string;
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  accessLevel: Exclude<DocumentAccessLevel, 'none'>;
+  grantedBy?: string;
+  grantedByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DocumentAuditEvent {
+  id: string;
+  documentId: string;
+  companyId: string;
+  eventType: string;
+  summary: string;
+  previousData?: Record<string, unknown>;
+  newData?: Record<string, unknown>;
+  performedBy?: string;
+  performedByName?: string;
+  createdAt: string;
+}
+
+export interface DocumentRelatedEntity {
+  id: string;
+  label: string;
+}
 
 export interface PipelineStage {
   id: string;

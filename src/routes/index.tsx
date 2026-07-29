@@ -17,7 +17,7 @@ import { Sales, SaleDetailPage } from '../pages/sales';
 import { Pipeline } from '../pages/pipeline';
 import { Agenda } from '../pages/agenda';
 import { Notifications } from '../pages/notifications';
-import { Inventory, ProductDetailPage } from '../pages/inventory';
+import { Inventory, ProductDetailPage, StockRecommendationsPage } from '../pages/inventory';
 import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
 import { Purchases, PurchaseDetailPage } from '../pages/purchases';
@@ -113,6 +113,10 @@ export const router = createBrowserRouter([
       {
         path: 'inventory',
         element: <Inventory />,
+      },
+      {
+        path: 'inventory/recommendations',
+        element: <StockRecommendationsPage />,
       },
       {
         path: 'inventory/:id',

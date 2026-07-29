@@ -11,23 +11,24 @@ import { CSVImportModal } from './components/CSVImportModal';
 
 import { useInventory, useInventoryStats, useCategories, useProductMutations } from '../../hooks/useInventory';
 import { Product } from '../../types';
-import { 
-  Package, 
-  AlertTriangle, 
-  PackageX, 
-  DollarSign, 
-  Search, 
-  X, 
-  Eye, 
-  Pencil, 
-  RefreshCw, 
-  Power, 
-  Plus, 
+import {
+  Package,
+  AlertTriangle,
+  PackageX,
+  DollarSign,
+  Search,
+  X,
+  Eye,
+  Pencil,
+  RefreshCw,
+  Power,
+  Plus,
   Upload,
   Loader2,
   ChevronLeft,
   ChevronRight,
-  AlertCircle
+  AlertCircle,
+  Lightbulb
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -366,6 +367,13 @@ export const InventoryPage: React.FC = () => {
         subtitle={`${totalCount} produtos listados de acordo com os filtros`}
         action={
           <div className="flex gap-2">
+            <button
+              onClick={() => navigate('/inventory/recommendations')}
+              className="border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200"
+            >
+              <Lightbulb className="w-4 h-4" />
+              Recomendações
+            </button>
             <button
               onClick={() => setIsCSVModalOpen(true)}
               className="border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200"

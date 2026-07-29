@@ -47,6 +47,10 @@ export const useFinancial = (params?: UseFinancialParams) => {
     queryClient.invalidateQueries({ queryKey: ['dashboard', 'recentActivity'] });
   };
 
+  const invalidateForecast = () => {
+    queryClient.invalidateQueries({ queryKey: ['financial', 'cashFlowForecast'] });
+  };
+
   const receivablesQuery = useQuery({
     queryKey: ['financial', 'receivables', receivableFilters],
     queryFn: () => getReceivables(receivableFilters),
@@ -77,6 +81,7 @@ export const useFinancial = (params?: UseFinancialParams) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['financial', 'receivables'] });
       queryClient.invalidateQueries({ queryKey: ['financial', 'cashFlow'] });
+      invalidateForecast();
       invalidateDashboard();
     },
     onError: (err: any) => {
@@ -90,6 +95,7 @@ export const useFinancial = (params?: UseFinancialParams) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['financial', 'payables'] });
       queryClient.invalidateQueries({ queryKey: ['financial', 'cashFlow'] });
+      invalidateForecast();
       invalidateDashboard();
     },
     onError: (err: any) => {
@@ -101,6 +107,7 @@ export const useFinancial = (params?: UseFinancialParams) => {
     mutationFn: (data: ManualReceivableInput) => createManualReceivable(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['financial', 'receivables'] });
+      invalidateForecast();
       invalidateDashboard();
     },
     onError: (err: any) => {
@@ -112,6 +119,7 @@ export const useFinancial = (params?: UseFinancialParams) => {
     mutationFn: (data: ManualPayableInput) => createManualPayable(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['financial', 'payables'] });
+      invalidateForecast();
       invalidateDashboard();
     },
     onError: (err: any) => {

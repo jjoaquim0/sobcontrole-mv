@@ -194,6 +194,8 @@ src/
 - Links antigos `/reports?tab=<aba>` redirecionam para as novas rotas em `/relatorios/*`
 
 ### 11. Documentos
+- Biblioteca privada com upload múltiplo, busca, filtros, ordenação e visualização em lista/grade
+- Permissões por documento, versões imutáveis, auditoria, exclusão lógica e URLs assinadas
 - Upload e gerenciamento de arquivos
 - Categorização e status (ativo/arquivado)
 
@@ -363,6 +365,49 @@ As permissões são aplicadas em duas camadas:
 ## Inteligência Artificial — Gestly
 
 O **Gestly** é o assistente de IA do SobControle. Ele funciona como um copiloto comercial inteligente integrado a todos os módulos do sistema.
+
+### Camada segura de IA (P0)
+
+O chat invoca exclusivamente a Edge Function `ai-gateway`. Autenticação,
+empresa, papel, kill switches, provider/modelo, limites atômicos e auditoria
+sem conteúdo são resolvidos no backend. A P0 não consulta dados internos, não
+executa ações e não armazena prompts ou respostas.
+
+Segredos permanecem nas variáveis da Edge Function:
+
+```bash
+supabase secrets set OPENAI_API_KEY=... AI_ALLOWED_ORIGINS=https://app.seudominio.com
+supabase functions deploy ai-gateway
+```
+
+Configuração, tabelas, RLS, operação de kill switches e evolução futura estão
+documentadas em `docs/architecture/ai-secure-backend-p0.md`.
+
+### Consultas reais somente leitura (P1)
+
+O Gestly pode consultar quatro fontes por ferramentas fixas e tipadas:
+
+- resumo de vendas pagas no período;
+- total de clientes ativos e novos clientes no período;
+- lista limitada de produtos ativos com estoque no mínimo ou abaixo;
+- totais e lista minimizada de contas vencidas, somente para `admin` e `manager`.
+
+As ferramentas não aceitam `company_id`, `user_id`, SQL, tabela, coluna ou
+filtros livres. O contexto de empresa é derivado do JWT no backend; as consultas
+usam o cliente Supabase do usuário, RPCs `SECURITY INVOKER`, RLS e filtro
+explícito pelo tenant. O modo permanece estritamente read-only e nenhuma
+ferramenta cria, altera, exclui, envia ou aprova dados.
+
+Antes de disponibilizar a P1, aplique as migrations e redeploy a Edge Function:
+
+```bash
+supabase db push
+supabase functions deploy ai-gateway
+supabase functions deploy gestly-chat
+```
+
+Contratos, fontes, permissões, isolamento, minimização e estados de erro estão
+documentados em `docs/architecture/gestly-read-only-tools-p1.md`.
 
 ### Funcionalidades da IA (Roadmap)
 

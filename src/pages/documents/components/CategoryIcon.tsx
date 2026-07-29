@@ -6,7 +6,7 @@ interface CategoryIconConfig {
   classes: string;
 }
 
-export const getFileIconConfig = (mimeType: string): CategoryIconConfig => {
+const getFileIconConfig = (mimeType: string): CategoryIconConfig => {
   if (mimeType === 'application/pdf') {
     return { Icon: FileText, classes: 'text-red-500 bg-red-50 dark:bg-red-950/20' };
   }

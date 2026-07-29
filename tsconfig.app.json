@@ -7,7 +7,9 @@
 
     /* Bundler mode */
     "moduleResolution": "node",
+    "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
+    "types": ["vite/client", "vitest/globals"],
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,

@@ -52,3 +52,6 @@ Thumbs.db
 
 # Duplicated nested project copy
 /SobControle/
+
+# Bundle gerado para deploy manual da Edge Function pelo editor web
+dist-edge/

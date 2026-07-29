@@ -6,47 +6,12 @@ import { DocumentCard } from './DocumentCard';
 interface DocumentGridProps {
   documents: Document[];
   isLoading: boolean;
-  onView: (doc: Document) => void;
-  onDownload: (doc: Document) => void;
-  onToggleArchive: (doc: Document) => void;
-  onDelete: (doc: Document) => void;
+  onView: (document: Document) => void;
   isFiltered: boolean;
 }
 
-export const DocumentGrid: React.FC<DocumentGridProps> = ({ documents, isLoading, onView, onDownload, onToggleArchive, onDelete, isFiltered }) => {
-  if (isLoading) {
-    return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="h-[168px] bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl p-4 animate-pulse space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-gray-100 dark:bg-white/5" />
-            <div className="h-3.5 bg-gray-100 dark:bg-white/5 rounded w-3/4" />
-            <div className="h-2.5 bg-gray-100 dark:bg-white/5 rounded w-1/2" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (documents.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl p-12 shadow-sm text-center">
-        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/20 rounded-full text-[#10b981] mb-4">
-          <FolderOpen className="w-8 h-8" />
-        </div>
-        <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-lg mb-1">Nenhum documento encontrado</h3>
-        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
-          {isFiltered ? 'Tente ajustar os termos de busca ou filtros selecionados.' : 'Faça upload do primeiro documento da sua empresa.'}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-      {documents.map((doc) => (
-        <DocumentCard key={doc.id} document={doc} onView={onView} onDownload={onDownload} onToggleArchive={onToggleArchive} onDelete={onDelete} />
-      ))}
-    </div>
-  );
+export const DocumentGrid: React.FC<DocumentGridProps> = ({ documents, isLoading, onView, isFiltered }) => {
+  if (isLoading) return <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{Array.from({ length: 8 }).map((_, index) => <div key={index} className="h-[184px] animate-pulse rounded-2xl border border-gray-100 bg-white p-4 dark:border-white/5 dark:bg-[#1a1d27]"><div className="h-12 w-12 rounded-xl bg-gray-100 dark:bg-white/5" /><div className="mt-4 h-3.5 w-3/4 rounded bg-gray-100 dark:bg-white/5" /><div className="mt-2 h-2.5 w-1/2 rounded bg-gray-100 dark:bg-white/5" /></div>)}</div>;
+  if (documents.length === 0) return <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-100 bg-white p-12 text-center shadow-sm dark:border-white/5 dark:bg-[#1a1d27]"><div className="mb-4 rounded-full bg-emerald-50 p-3 text-[#10b981] dark:bg-emerald-950/20"><FolderOpen className="h-8 w-8" /></div><h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Nenhum documento encontrado</h3><p className="mt-1 max-w-xs text-sm text-gray-500 dark:text-gray-400">{isFiltered ? 'Tente ajustar os termos da busca ou os filtros selecionados.' : 'Envie o primeiro documento da sua empresa.'}</p></div>;
+  return <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">{documents.map((document) => <DocumentCard key={document.id} document={document} onView={onView} />)}</div>;
 };

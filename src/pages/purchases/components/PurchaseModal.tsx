@@ -18,7 +18,7 @@ const purchaseSchema = z.object({
 
 type PurchaseForm = z.infer<typeof purchaseSchema>;
 
-interface SelectedItem {
+export interface SelectedItem {
   productId: string;
   name: string;
   sku: string;
@@ -33,6 +33,10 @@ export interface PurchaseModalProps {
   onClose: () => void;
   onSave: (data: any) => Promise<void>;
   isLoading?: boolean;
+  /** Pré-preenche os itens ao abrir (ex.: rascunho vindo de uma recomendação de estoque). O usuário ainda precisa confirmar a compra normalmente. */
+  initialItems?: SelectedItem[];
+  /** Pré-preenche o fornecedor ao abrir, quando aplicável. */
+  initialSupplierId?: string;
 }
 
 export const PurchaseModal: React.FC<PurchaseModalProps> = ({
@@ -40,6 +44,8 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   onClose,
   onSave,
   isLoading = false,
+  initialItems,
+  initialSupplierId,
 }) => {
   const { suppliers } = useSuppliers({ status: 'active' });
 
@@ -84,19 +90,20 @@ export const PurchaseModal: React.FC<PurchaseModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       reset({
-        supplierId: '',
+        supplierId: initialSupplierId || '',
         paymentMethod: 'pix',
         paymentStatus: 'paid',
         discount: 0,
         fee: 0,
         notes: '',
       });
-      setAddedItems([]);
+      setAddedItems(initialItems || []);
       setProdQuery('');
       setDebouncedProdQuery('');
       setShowResults(false);
       setItemsError(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, reset]);
 
   useEffect(() => {

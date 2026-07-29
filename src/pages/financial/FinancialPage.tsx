@@ -5,10 +5,11 @@ import { useDashboard } from '../../hooks/useDashboard';
 import { ReceivablesTab } from './components/ReceivablesTab';
 import { PayablesTab } from './components/PayablesTab';
 import { CashFlowTab } from './components/CashFlowTab';
+import { CashFlowForecastTab } from './components/CashFlowForecastTab';
 import { CategoriesTab } from './components/CategoriesTab';
-import { ArrowDownCircle, ArrowUpCircle, AlertTriangle, Loader2, Tag, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, AlertTriangle, Loader2, Tag, TrendingUp, Wallet } from 'lucide-react';
 
-type FinancialTab = 'receivables' | 'payables' | 'cashflow' | 'categories';
+type FinancialTab = 'receivables' | 'payables' | 'cashflow' | 'forecast' | 'categories';
 
 const formatMoney = (val: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -17,6 +18,7 @@ const TABS: { key: FinancialTab; label: string }[] = [
   { key: 'receivables', label: 'Contas a Receber' },
   { key: 'payables', label: 'Contas a Pagar' },
   { key: 'cashflow', label: 'Fluxo de Caixa' },
+  { key: 'forecast', label: 'Previsão de Caixa' },
   { key: 'categories', label: 'Categorias' },
 ];
 
@@ -81,6 +83,7 @@ export const FinancialPage: React.FC = () => {
                 {tab.key === 'receivables' && <ArrowDownCircle className="w-4 h-4" />}
                 {tab.key === 'payables' && <ArrowUpCircle className="w-4 h-4" />}
                 {tab.key === 'cashflow' && <Wallet className="w-4 h-4" />}
+                {tab.key === 'forecast' && <TrendingUp className="w-4 h-4" />}
                 {tab.key === 'categories' && <Tag className="w-4 h-4" />}
                 {tab.label}
               </span>
@@ -93,6 +96,12 @@ export const FinancialPage: React.FC = () => {
         {activeTab === 'receivables' && <ReceivablesTab />}
         {activeTab === 'payables' && <PayablesTab />}
         {activeTab === 'cashflow' && <CashFlowTab />}
+        {activeTab === 'forecast' && (
+          <CashFlowForecastTab
+            onViewReceivables={() => setActiveTab('receivables')}
+            onViewPayables={() => setActiveTab('payables')}
+          />
+        )}
         {activeTab === 'categories' && <CategoriesTab />}
       </div>
     </div>

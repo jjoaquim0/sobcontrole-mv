@@ -186,11 +186,17 @@ src/
 
 ### 10. Relatórios (Admin/Gerente)
 - Item expansível na Sidebar com 7 rotas próprias: Visão Geral, Central de Inteligência, Vendas e Pipeline, Clientes, Financeiro, Estoque e Compras e Relatórios Personalizados
-- Visão Geral/Vendas/Clientes/Financeiro/Estoque: indicadores e gráficos (Recharts) por período e exportação em CSV; o DRE fica dentro da rota Financeiro
-- Central de Inteligência: alertas, oportunidades e ações sugeridas pela Gestly
-- Relatórios Personalizados aparece como "Em breve" até a liberação do construtor
+- Filtro global com Hoje, 7 dias, mês atual, mês anterior, trimestre, ano e período personalizado, sempre comparado ao intervalo anterior equivalente
+- Visão Geral: receita paga, vendas válidas, ticket médio, pipeline, clientes, recebíveis, vencidos, estoque e resultado direto com drill-downs e insights determinísticos
+- Vendas e Pipeline: evolução da receita, vendedores, funil por etapa, conversão de negócios fechados, motivos de perda, oportunidades paradas e vendas recentes
+- Clientes: evolução da base, receita paga, ranking e clientes sem compra válida no período; churn e LTV não são estimados sem definição confiável
+- Financeiro/DRE: agenda de vencimentos, aging, títulos vencidos/próximos e demonstrativo gerencial sem dupla contagem; acesso validado para admin/manager também no banco
+- Estoque e Compras: cobertura de custo, baixo/zerado, produtos sem saída no período, compras pendentes, movimentos e fornecedores; valor de estoque não usa preço de venda como custo
+- Central de Inteligência: fila priorizada baseada nas notificações reais, com ações existentes
+- Relatórios Personalizados aparece explicitamente como "Em breve", sem simular criação, salvamento ou agendamento
+- Componentes reutilizáveis para métricas, gráficos, seções, filtros, estados, tabelas, insights e atualização; gráficos responsivos em Recharts e exportação CSV
 - 4 estados por módulo: Disponível, Contratado, Em breve e Bloqueado; itens bloqueados continuam visíveis com cadeado e CTA para planos
-- Acesso calculado por `resolveModuleAccess()` e validado novamente em cada rota antes de montar consultas; RLS restringe os dados por empresa
+- Acesso calculado por `resolveModuleAccess()` e validado novamente em cada rota antes de montar consultas; cache e queries carregam a empresa ativa e a RLS restringe os dados por tenant
 - Links antigos `/reports?tab=<aba>` redirecionam para as novas rotas em `/relatorios/*`
 
 ### 11. Documentos
@@ -251,7 +257,8 @@ src/
 
 ### Fase 3 — Analytics e Automação
 - [x] **BI / Analytics Avançado (vitrine)** — Central de Inteligência em Relatórios: catálogo de módulos, controle de acesso por plano/add-on, RLS (Story 1.6)
-- [ ] **BI / Analytics Avançado (indicadores aprofundados)** — Funil de vendas por etapa, churn score, fluxo de caixa projetado, giro de estoque e demais indicadores descritos em cada módulo da Central de Inteligência ainda não têm implementação própria — hoje "Acessar análise" leva à aba equivalente já existente em Relatórios/Dashboard/Notificações (ver Story 1.6)
+- [x] **BI / Analytics Avançado (indicadores confiáveis)** — Funil por etapa, comparações temporais, agenda financeira, DRE gerencial, saídas de estoque, rankings, tabelas de auditoria e insights determinísticos (Story 1.24)
+- [ ] **BI / Métricas que exigem novos dados** — Churn/LTV, previsão probabilística de receita, lead time, estoque em trânsito, giro contábil clássico, despesas por categoria e margem contábil oficial permanecem fora do produto até existir fonte e definição confiáveis
 - [ ] **Marketing / Automação** — E-mail marketing, disparo de campanhas, automação de follow-up com base em comportamento
 
 ### Fase 4 — Futuro (Longo Prazo)

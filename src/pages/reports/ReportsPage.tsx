@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
-import { AlertTriangle, Bell, FileSpreadsheet, SlidersHorizontal, Wallet } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Bell, Clock3, FileSpreadsheet, Flame, Inbox, SlidersHorizontal, Wallet } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { useNotifications } from '../../hooks/useNotifications';
 import { ReportQueryKey, useReports } from '../../hooks/useReports';
 import { ReportPeriod } from '../../types';
 import { NotificationItem } from '../notifications/components/NotificationItem';
+import { DashboardSection } from './components/DashboardSection';
+import { DataFreshnessIndicator } from './components/DataFreshnessIndicator';
+import { MetricCard } from './components/MetricCard';
 import { PeriodSelector } from './components/PeriodSelector';
+import { ReportEmptyState } from './components/ReportEmptyState';
+import { ReportErrorState } from './components/ReportErrorState';
 import { CustomersTab } from './tabs/CustomersTab';
 import { DRETab } from './tabs/DRETab';
 import { FinancialTab } from './tabs/FinancialTab';
@@ -30,8 +35,19 @@ const DOMAIN_QUERIES: Record<ReportDomain, readonly ReportQueryKey[]> = {
   inventory: ['inventory'],
 };
 
+const isFinancialAccessDenied = (error: unknown) =>
+  error instanceof Error && error.name === 'FinancialPermissionError';
+
+const NOTIFICATION_PRIORITY_ORDER = {
+  critica: 0,
+  alta: 1,
+  media: 2,
+  baixa: 3,
+  informativa: 4,
+} as const;
+
 const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subtitle }) => {
-  const [period, setPeriod] = useState<ReportPeriod>({ type: '30d' });
+  const [period, setPeriod] = useState<ReportPeriod>({ type: 'current_month' });
   const [searchParams, setSearchParams] = useSearchParams();
   const reports = useReports(period, DOMAIN_QUERIES[domain]);
   const financialView = searchParams.get('view') === 'dre' ? 'dre' : 'cashflow';
@@ -42,12 +58,12 @@ const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subt
       const data = reports.overview.data;
       reports.exportCSV(
         [
-          { indicador: 'Receita', valor: data.revenue.current },
-          { indicador: 'Despesas', valor: data.expenses.current },
-          { indicador: 'Lucro', valor: data.profit.current },
-          { indicador: 'Vendas', valor: data.salesCount.current },
-          { indicador: 'Ticket Médio', valor: data.averageTicket.current },
-          { indicador: 'Clientes Ativos', valor: data.activeCustomers },
+          { indicador: 'Receita paga', valor: data.revenue.current },
+          { indicador: 'Custos e despesas identificados', valor: data.expenses.current },
+          { indicador: 'Resultado direto', valor: data.profit.current },
+          { indicador: 'Vendas válidas', valor: data.salesCount.current },
+          { indicador: 'Ticket médio pago', valor: data.averageTicket.current },
+          { indicador: 'Clientes ativos', valor: data.activeCustomers },
         ],
         `relatorio-visao-geral-${todayStamp}`
       );
@@ -55,7 +71,11 @@ const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subt
 
     if (domain === 'sales' && reports.sales.data) {
       reports.exportCSV(
-        reports.sales.data.byProduct.map((item) => ({ produto: item.productName, quantidade: item.quantity, receita: item.revenue })),
+        reports.sales.data.byProduct.map((item) => ({
+          produto: item.productName,
+          quantidade: item.quantity,
+          receita: item.revenue,
+        })),
         `relatorio-vendas-${todayStamp}`
       );
     }
@@ -64,7 +84,7 @@ const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subt
       reports.exportCSV(
         reports.customer.data.topBuyers.map((customer) => ({
           cliente: customer.customerName,
-          totalGasto: customer.totalSpent,
+          receitaPaga: customer.totalSpent,
           compras: customer.saleCount,
           ticketMedio: customer.averageTicket,
           ultimaCompra: reports.formatDate(customer.lastPurchase),
@@ -83,8 +103,16 @@ const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subt
     if (domain === 'financial' && financialView === 'cashflow' && reports.financial.data) {
       reports.exportCSV(
         [
-          ...reports.financial.data.receivables.byDueDate.map((item) => ({ tipo: 'A Receber', data: item.date, valor: item.amount })),
-          ...reports.financial.data.payables.byDueDate.map((item) => ({ tipo: 'A Pagar', data: item.date, valor: item.amount })),
+          ...reports.financial.data.receivables.byDueDate.map((item) => ({
+            tipo: 'A receber',
+            data: item.date,
+            valor: item.amount,
+          })),
+          ...reports.financial.data.payables.byDueDate.map((item) => ({
+            tipo: 'A pagar',
+            data: item.date,
+            valor: item.amount,
+          })),
         ],
         `relatorio-financeiro-${todayStamp}`
       );
@@ -93,7 +121,7 @@ const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subt
     if (domain === 'inventory' && reports.inventory.data) {
       reports.exportCSV(
         reports.inventory.data.movements.map((movement) => ({
-          data: movement.date,
+          data: reports.formatDate(movement.date),
           produto: movement.productName,
           tipo: movement.type === 'in' ? 'Entrada' : 'Saída',
           quantidade: movement.quantity,
@@ -105,103 +133,283 @@ const ReportDomainPage: React.FC<ReportDomainPageProps> = ({ domain, title, subt
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <PageHeader
-        title={title}
-        subtitle={subtitle}
-        action={
-          domain === 'financial' && financialView === 'dre' ? (
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 transition-colors flex items-center gap-1.5 print:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8]"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              Imprimir DRE
-            </button>
-          ) : undefined
-        }
-      />
+      <PageHeader title={title} subtitle={subtitle} />
 
-      <PeriodSelector period={period} onChange={setPeriod} />
+      <PeriodSelector period={period} onChange={setPeriod} appliedLabel={reports.dates.label} />
 
       {domain === 'financial' && (
-        <div className="inline-flex rounded-lg bg-gray-100 dark:bg-white/5 p-1" aria-label="Visão financeira">
+        <div className="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-white/5" aria-label="Visão financeira">
           <button
             type="button"
             onClick={() => setSearchParams({})}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${financialView === 'cashflow' ? 'bg-white dark:bg-[#1a1d27] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-white/50'}`}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
+              financialView === 'cashflow'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-[#1a1d27] dark:text-white'
+                : 'text-gray-500 dark:text-white/50'
+            }`}
           >
-            <Wallet className="w-4 h-4" /> Financeiro
+            <Wallet className="h-4 w-4" /> Financeiro
           </button>
           <button
             type="button"
             onClick={() => setSearchParams({ view: 'dre' })}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${financialView === 'dre' ? 'bg-white dark:bg-[#1a1d27] text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 dark:text-white/50'}`}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
+              financialView === 'dre'
+                ? 'bg-white text-gray-900 shadow-sm dark:bg-[#1a1d27] dark:text-white'
+                : 'text-gray-500 dark:text-white/50'
+            }`}
           >
-            <FileSpreadsheet className="w-4 h-4" /> DRE
+            <FileSpreadsheet className="h-4 w-4" /> DRE
           </button>
         </div>
       )}
 
-      {domain === 'overview' && <OverviewTab data={reports.overview.data} isLoading={reports.overview.isLoading} isError={reports.overview.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
-      {domain === 'sales' && <SalesTab data={reports.sales.data} isLoading={reports.sales.isLoading} isError={reports.sales.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
-      {domain === 'customers' && <CustomersTab data={reports.customer.data} isLoading={reports.customer.isLoading} isError={reports.customer.isError} formatCurrency={reports.formatCurrency} formatDate={reports.formatDate} onExport={handleExport} />}
-      {domain === 'financial' && financialView === 'cashflow' && <FinancialTab data={reports.financial.data} isLoading={reports.financial.isLoading} isError={reports.financial.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
-      {domain === 'financial' && financialView === 'dre' && <DRETab data={reports.dre.data} isLoading={reports.dre.isLoading} isError={reports.dre.isError} formatCurrency={reports.formatCurrency} formatDate={reports.formatDate} onExport={handleExport} />}
-      {domain === 'inventory' && <InventoryTab data={reports.inventory.data} isLoading={reports.inventory.isLoading} isError={reports.inventory.isError} formatCurrency={reports.formatCurrency} onExport={handleExport} />}
+      {domain === 'overview' && (
+        <OverviewTab
+          data={reports.overview.data}
+          isLoading={reports.overview.isLoading}
+          isError={reports.overview.isError}
+          isAccessDenied={isFinancialAccessDenied(reports.overview.error)}
+          formatCurrency={reports.formatCurrency}
+          onExport={handleExport}
+          onRetry={() => void reports.overview.refetch()}
+          updatedAt={reports.overview.dataUpdatedAt}
+          periodLabel={reports.dates.label}
+        />
+      )}
+      {domain === 'sales' && (
+        <SalesTab
+          data={reports.sales.data}
+          isLoading={reports.sales.isLoading}
+          isError={reports.sales.isError}
+          formatCurrency={reports.formatCurrency}
+          onExport={handleExport}
+          onRetry={() => void reports.sales.refetch()}
+          updatedAt={reports.sales.dataUpdatedAt}
+          periodLabel={reports.dates.label}
+        />
+      )}
+      {domain === 'customers' && (
+        <CustomersTab
+          data={reports.customer.data}
+          isLoading={reports.customer.isLoading}
+          isError={reports.customer.isError}
+          formatCurrency={reports.formatCurrency}
+          formatDate={reports.formatDate}
+          onExport={handleExport}
+          onRetry={() => void reports.customer.refetch()}
+          updatedAt={reports.customer.dataUpdatedAt}
+          periodLabel={reports.dates.label}
+        />
+      )}
+      {domain === 'financial' && financialView === 'cashflow' && (
+        <FinancialTab
+          data={reports.financial.data}
+          isLoading={reports.financial.isLoading}
+          isError={reports.financial.isError}
+          isAccessDenied={isFinancialAccessDenied(reports.financial.error)}
+          formatCurrency={reports.formatCurrency}
+          onExport={handleExport}
+          onRetry={() => void reports.financial.refetch()}
+          updatedAt={reports.financial.dataUpdatedAt}
+          periodLabel={reports.dates.label}
+        />
+      )}
+      {domain === 'financial' && financialView === 'dre' && (
+        <DRETab
+          data={reports.dre.data}
+          isLoading={reports.dre.isLoading}
+          isError={reports.dre.isError}
+          isAccessDenied={isFinancialAccessDenied(reports.dre.error)}
+          formatCurrency={reports.formatCurrency}
+          formatDate={reports.formatDate}
+          onExport={handleExport}
+          onRetry={() => void reports.dre.refetch()}
+          updatedAt={reports.dre.dataUpdatedAt}
+        />
+      )}
+      {domain === 'inventory' && (
+        <InventoryTab
+          data={reports.inventory.data}
+          isLoading={reports.inventory.isLoading}
+          isError={reports.inventory.isError}
+          formatCurrency={reports.formatCurrency}
+          onExport={handleExport}
+          onRetry={() => void reports.inventory.refetch()}
+          updatedAt={reports.inventory.dataUpdatedAt}
+          periodLabel={reports.dates.label}
+        />
+      )}
     </div>
   );
 };
 
-export const ReportsOverviewPage = () => <ReportDomainPage domain="overview" title="Visão Geral" subtitle="Principais indicadores da sua empresa em um único painel" />;
+export const ReportsOverviewPage = () => (
+  <ReportDomainPage
+    domain="overview"
+    title="Visão Geral"
+    subtitle="Principais indicadores da sua empresa em um único painel"
+  />
+);
 
-export const ReportsSalesPage = () => <ReportDomainPage domain="sales" title="Vendas e Pipeline" subtitle="Acompanhe receita, ticket médio e desempenho comercial" />;
+export const ReportsSalesPage = () => (
+  <ReportDomainPage
+    domain="sales"
+    title="Vendas e Pipeline"
+    subtitle="Receita, conversão e desempenho comercial com dados realizados"
+  />
+);
 
-export const ReportsCustomersPage = () => <ReportDomainPage domain="customers" title="Clientes" subtitle="Entenda atividade, rentabilidade e comportamento da sua base" />;
+export const ReportsCustomersPage = () => (
+  <ReportDomainPage
+    domain="customers"
+    title="Clientes"
+    subtitle="Atividade, receita e comportamento observável da sua base"
+  />
+);
 
-export const ReportsFinancialPage = () => <ReportDomainPage domain="financial" title="Financeiro" subtitle="Receitas, contas, inadimplência, fluxo de caixa e DRE" />;
+export const ReportsFinancialPage = () => (
+  <ReportDomainPage
+    domain="financial"
+    title="Financeiro"
+    subtitle="Contas, inadimplência, agenda financeira e DRE gerencial"
+  />
+);
 
-export const ReportsInventoryPage = () => <ReportDomainPage domain="inventory" title="Estoque e Compras" subtitle="Giro, rupturas, movimentações e desempenho dos produtos" />;
+export const ReportsInventoryPage = () => (
+  <ReportDomainPage
+    domain="inventory"
+    title="Estoque e Compras"
+    subtitle="Rupturas, saídas, movimentações e desempenho de compras"
+  />
+);
 
 export const ReportsIntelligencePage: React.FC = () => {
-  const { data: notifications, isLoading, isError, refetch } = useNotifications({ limit: 50 });
+  const {
+    data: notifications,
+    isLoading,
+    isError,
+    isFetching,
+    dataUpdatedAt,
+    refetch,
+  } = useNotifications({ limit: 50 });
+  const intelligence = useMemo(() => {
+    const items = notifications ?? [];
+    return {
+      critical: items.filter((item) => item.priority === 'critica').length,
+      high: items.filter((item) => item.priority === 'alta').length,
+      unread: items.filter((item) => item.status === 'unread').length,
+      total: items.length,
+      ordered: [...items].sort(
+        (first, second) =>
+          NOTIFICATION_PRIORITY_ORDER[first.priority] -
+            NOTIFICATION_PRIORITY_ORDER[second.priority] ||
+          new Date(second.createdAt).getTime() - new Date(first.createdAt).getTime()
+      ),
+    };
+  }, [notifications]);
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <PageHeader title="Central de Inteligência" subtitle="Insights, alertas, oportunidades e ações sugeridas pela Gestly" />
+      <PageHeader
+        title="Central de Inteligência"
+        subtitle="Insights e ações baseados nos eventos reais registrados pela Gestly"
+      />
 
       {isLoading ? (
-        <div className="space-y-3" role="status" aria-label="Carregando inteligencia">
-          {Array.from({ length: 4 }).map((_, index) => <div key={index} className="h-28 rounded-2xl bg-gray-100 dark:bg-white/5 animate-pulse" />)}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <MetricCard
+              key={index}
+              title="Carregando"
+              value=""
+              icon={<Bell className="h-5 w-5" />}
+              description="Carregando indicadores"
+              isLoading
+            />
+          ))}
         </div>
       ) : isError ? (
-        <div className="min-h-[360px] flex flex-col items-center justify-center text-center gap-3">
-          <AlertTriangle className="w-8 h-8 text-red-400" />
-          <p className="text-sm text-red-500">Erro ao carregar os insights da Gestly.</p>
-          <button type="button" onClick={() => refetch()} className="text-sm font-semibold text-[#00a8d8] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] rounded">Tentar novamente</button>
-        </div>
+        <ReportErrorState
+          title="Não foi possível carregar a Central de Inteligência"
+          description="Os alertas existentes foram preservados. Tente atualizar a consulta."
+          onRetry={() => void refetch()}
+        />
       ) : !notifications?.length ? (
-        <div className="min-h-[360px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">
-          <Bell className="w-9 h-9 text-gray-300 dark:text-white/20 mb-3" />
-          <h2 className="text-sm font-bold text-gray-900 dark:text-white">Nenhum insight no momento</h2>
-          <p className="text-xs text-gray-500 dark:text-white/50 mt-1">A Gestly exibirá oportunidades e alertas assim que identificar sinais relevantes.</p>
-        </div>
+        <ReportEmptyState
+          title="Nenhum insight no momento"
+          description="A Gestly exibirá alertas baseados nos eventos reais da sua empresa assim que houver sinais relevantes."
+          icon={<Bell className="h-9 w-9" />}
+          minHeight={360}
+        />
       ) : (
-        <div className="space-y-3">
-          {notifications.map((notification) => <NotificationItem key={notification.id} notification={notification} />)}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              title="Críticos"
+              value={intelligence.critical}
+              icon={<Flame className="h-5 w-5" />}
+              description="Alertas classificados como críticos."
+              accent="red"
+            />
+            <MetricCard
+              title="Alta prioridade"
+              value={intelligence.high}
+              icon={<Bell className="h-5 w-5" />}
+              description="Alertas classificados com prioridade alta."
+              accent="amber"
+            />
+            <MetricCard
+              title="Não lidos"
+              value={intelligence.unread}
+              icon={<Inbox className="h-5 w-5" />}
+              description="Alertas que ainda não foram abertos."
+              accent="blue"
+            />
+            <MetricCard
+              title="Sinais ativos"
+              value={intelligence.total}
+              icon={<Clock3 className="h-5 w-5" />}
+              description="Total de alertas retornados na consulta atual."
+              accent="purple"
+            />
+          </div>
+
+          <DashboardSection
+            title="Fila priorizada"
+            description="Eventos reais ordenados pela regra de prioridade da central, com ações vinculadas quando disponíveis."
+            icon={<Bell className="h-5 w-5" />}
+            action={
+              <DataFreshnessIndicator
+                updatedAt={dataUpdatedAt}
+                onRefresh={() => void refetch()}
+                isRefreshing={isFetching}
+              />
+            }
+          >
+            <div className="space-y-3">
+              {intelligence.ordered.map((notification) => (
+                <NotificationItem key={notification.id} notification={notification} />
+              ))}
+            </div>
+          </DashboardSection>
+        </>
       )}
     </div>
   );
 };
 
 export const ReportsCustomPage: React.FC = () => (
-  <div className="animate-fade-in">
-    <PageHeader title="Relatórios Personalizados" subtitle="Crie, salve, exporte e agende relatórios sob medida" />
-    <div className="min-h-[360px] flex flex-col items-center justify-center text-center border border-dashed border-gray-200 dark:border-white/10 rounded-2xl">
-      <SlidersHorizontal className="w-9 h-9 text-gray-300 dark:text-white/20 mb-3" />
-      <h2 className="text-sm font-bold text-gray-900 dark:text-white">Nenhum relatório personalizado</h2>
-      <p className="text-xs text-gray-500 dark:text-white/50 mt-1">Seus modelos salvos aparecerão aqui quando o construtor estiver disponível.</p>
-    </div>
+  <div className="space-y-5 animate-fade-in">
+    <PageHeader
+      title="Relatórios Personalizados"
+      subtitle="Construtor de relatórios em planejamento"
+    />
+    <ReportEmptyState
+      title="Recurso em breve"
+      description="O construtor, o salvamento e o agendamento de relatórios ainda não estão disponíveis. Nenhuma configuração será simulada nesta tela."
+      icon={<SlidersHorizontal className="h-9 w-9" />}
+      minHeight={360}
+    />
   </div>
 );

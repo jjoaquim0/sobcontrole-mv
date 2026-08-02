@@ -1,23 +1,31 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  ResponsiveContainer,
-  BarChart,
+  Area,
+  AreaChart,
   Bar,
-  PieChart,
-  Pie,
+  BarChart,
+  CartesianGrid,
   Cell,
+  Funnel,
+  FunnelChart,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
 } from 'recharts';
-import { ShoppingCart, DollarSign, TrendingUp, Percent } from 'lucide-react';
+import { BadgeDollarSign, CircleDollarSign, Clock3, Percent, ShoppingBag, Target } from 'lucide-react';
+import { Column } from '../../../components/shared/DataTable';
 import { SalesReport } from '../../../services/reportService';
-import { ReportCard, ReportCardSkeleton } from '../components/ReportCard';
-import { ReportChart, chartTooltipFormatter, CHART_COLORS } from '../components/ReportChart';
+import { formatDate } from '../reportFormatters';
+import { ChartCard } from '../components/ChartCard';
+import { DashboardSection } from '../components/DashboardSection';
+import { DataFreshnessIndicator } from '../components/DataFreshnessIndicator';
 import { ExportButton } from '../components/ExportButton';
-import { DataTable, Column } from '../../../components/shared/DataTable';
+import { MetricCard } from '../components/MetricCard';
+import { ReportDataTable } from '../components/ReportDataTable';
+import { ReportErrorState } from '../components/ReportErrorState';
 
 interface SalesTabProps {
   data?: SalesReport;
@@ -25,122 +33,244 @@ interface SalesTabProps {
   isError: boolean;
   formatCurrency: (value?: number) => string;
   onExport: () => void;
+  onRetry: () => void;
+  updatedAt?: number;
+  periodLabel: string;
 }
 
-const PAYMENT_METHOD_LABELS: Record<string, string> = {
-  cash: 'Dinheiro',
-  money: 'Dinheiro',
-  credit_card: 'Cartão Crédito',
-  debit_card: 'Cartão Débito',
-  pix: 'PIX',
-  bank_slip: 'Boleto',
-  bank_transfer: 'Transferência',
-  other: 'Outro',
+const compactCurrency = (value: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 }).format(value);
+
+const SALE_STATUS_LABELS: Record<string, string> = {
+  paid: 'Pago',
+  pending: 'Pendente',
 };
 
-export const SalesTab: React.FC<SalesTabProps> = ({ data, isLoading, isError, formatCurrency, onExport }) => {
-  if (isError) {
-    return <div className="text-center py-10 text-sm text-red-500">Erro ao carregar o relatório de Vendas. Tente novamente.</div>;
-  }
+export const SalesTab: React.FC<SalesTabProps> = ({
+  data,
+  isLoading,
+  isError,
+  formatCurrency,
+  onExport,
+  onRetry,
+  updatedAt,
+  periodLabel,
+}) => {
+  const navigate = useNavigate();
+  if (isError) return <ReportErrorState onRetry={onRetry} />;
 
-  const columns: Column<SalesReport['byProduct'][number]>[] = [
-    { key: 'productName', label: 'Produto' },
-    { key: 'quantity', label: 'Quantidade' },
-    { key: 'revenue', label: 'Receita', render: (row) => formatCurrency(row.revenue) },
+  const pipelineData = (data?.pipelineStages || []).filter((stage) => stage.count > 0);
+  const hasSalesSeries = Boolean(data?.byDay.some((point) => point.count > 0 || point.revenue > 0));
+
+  const stalledColumns: Column<SalesReport['stalledOpportunities'][number]>[] = [
+    { key: 'title', label: 'Oportunidade' },
+    { key: 'customerName', label: 'Cliente' },
+    { key: 'ownerName', label: 'Responsável' },
+    { key: 'stageName', label: 'Etapa' },
+    { key: 'value', label: 'Valor', render: (row) => formatCurrency(row.value) },
     {
-      key: 'percent',
-      label: '% do Total',
-      render: (row) => {
-        const total = data?.summary.totalRevenue || 0;
-        const pct = total > 0 ? (row.revenue / total) * 100 : 0;
-        return `${pct.toFixed(1)}%`;
-      },
+      key: 'daysWithoutUpdate',
+      label: 'Sem atualização',
+      render: (row) => <span className="font-semibold text-amber-600 dark:text-amber-300">{row.daysWithoutUpdate} dias</span>,
     },
   ];
 
-  const paymentMethodData = (data?.byPaymentMethod || []).map((m) => ({ ...m, label: PAYMENT_METHOD_LABELS[m.method] || m.method }));
+  const recentColumns: Column<SalesReport['recentSales'][number]>[] = [
+    { key: 'customerName', label: 'Cliente' },
+    { key: 'sellerName', label: 'Vendedor' },
+    { key: 'createdAt', label: 'Data', render: (row) => formatDate(row.createdAt) },
+    { key: 'value', label: 'Valor', render: (row) => formatCurrency(row.value) },
+    {
+      key: 'status',
+      label: 'Status',
+      render: (row) => (
+        <span className={`rounded-full px-2 py-1 text-xs font-semibold ${row.status === 'paid' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-400/10 dark:text-amber-300'}`}>
+          {SALE_STATUS_LABELS[row.status] || row.status}
+        </span>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Relatório de Vendas</h2>
+    <div className="space-y-8">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <DataFreshnessIndicator updatedAt={updatedAt} onRefresh={onRetry} />
         <ExportButton onExport={onExport} disabled={!data} />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {isLoading ? (
-          Array.from({ length: 4 }).map((_, i) => <ReportCardSkeleton key={i} />)
-        ) : (
-          <>
-            <ReportCard title="Total de Vendas" value={data?.summary.totalSales ?? 0} accentColor="blue" icon={<ShoppingCart className="w-5 h-5" />} />
-            <ReportCard title="Receita Total" value={formatCurrency(data?.summary.totalRevenue)} accentColor="green" icon={<DollarSign className="w-5 h-5" />} />
-            <ReportCard title="Ticket Médio" value={formatCurrency(data?.summary.averageTicket)} accentColor="purple" icon={<TrendingUp className="w-5 h-5" />} />
-            <ReportCard title="Descontos" value={formatCurrency(data?.summary.totalDiscount)} accentColor="yellow" icon={<Percent className="w-5 h-5" />} />
-          </>
-        )}
-      </div>
+      <DashboardSection
+        title="Desempenho comercial"
+        description="Receita considera somente vendas pagas; volume exclui vendas canceladas."
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <MetricCard
+            title="Receita paga"
+            value={formatCurrency(data?.summary.totalRevenue)}
+            icon={<CircleDollarSign className="h-5 w-5" />}
+            description="Soma do valor final de vendas pagas no período."
+            trend={data?.comparison.totalRevenue.variance}
+            href="/sales"
+            actionLabel="Ver vendas"
+            isLoading={isLoading}
+          />
+          <MetricCard
+            title="Vendas válidas"
+            value={data?.summary.totalSales ?? 0}
+            icon={<ShoppingBag className="h-5 w-5" />}
+            description="Vendas pagas e pendentes; canceladas não entram."
+            trend={data?.comparison.totalSales.variance}
+            href="/sales"
+            accent="blue"
+            isLoading={isLoading}
+          />
+          <MetricCard
+            title="Ticket médio pago"
+            value={formatCurrency(data?.summary.averageTicket)}
+            icon={<BadgeDollarSign className="h-5 w-5" />}
+            description="Receita paga dividida pela quantidade de vendas pagas."
+            trend={data?.comparison.averageTicket.variance}
+            accent="purple"
+            isLoading={isLoading}
+          />
+          <MetricCard
+            title="Pipeline aberto"
+            value={formatCurrency(data?.summary.pipelineValue)}
+            icon={<Target className="h-5 w-5" />}
+            description="Valor das oportunidades abertas criadas no período."
+            href="/pipeline"
+            actionLabel="Abrir pipeline"
+            accent="blue"
+            isLoading={isLoading}
+          />
+          <MetricCard
+            title="Conversão fechada"
+            value={data?.summary.closedConversion == null ? '—' : `${data.summary.closedConversion.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`}
+            icon={<Percent className="h-5 w-5" />}
+            description="Negócios ganhos divididos por negócios ganhos + perdidos no período."
+            insufficientLabel={data?.summary.closedConversion == null ? 'Sem negócios fechados no período' : undefined}
+            accent="brand"
+            isLoading={isLoading}
+          />
+          <MetricCard
+            title="Oportunidades paradas"
+            value={data?.summary.stalledDeals ?? 0}
+            icon={<Clock3 className="h-5 w-5" />}
+            description="Oportunidades abertas sem atualização há 14 dias ou mais."
+            href="/pipeline"
+            actionLabel="Revisar oportunidades"
+            accent={(data?.summary.stalledDeals ?? 0) > 0 ? 'amber' : 'slate'}
+            isLoading={isLoading}
+          />
+        </div>
+      </DashboardSection>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ReportChart title="Vendas por Dia" isLoading={isLoading} isEmpty={!data?.byDay?.length}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data?.byDay}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-100 dark:stroke-white/5" />
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => chartTooltipFormatter(v)} />
-              <Bar dataKey="revenue" name="Receita" fill="#10b981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ReportChart>
+      <DashboardSection title="Tendência e execução" description="Quando a receita mudou e quais vendedores sustentaram o resultado.">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <ChartCard
+            title="Evolução da receita paga"
+            subtitle={`${periodLabel} · vendas canceladas e pendentes não compõem a receita`}
+            isLoading={isLoading}
+            isEmpty={!hasSalesSeries}
+            testId="sales-revenue-chart"
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data?.byDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                <YAxis tickFormatter={compactCurrency} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} width={72} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Area type="monotone" dataKey="revenue" name="Receita paga" stroke="#10b981" fill="#10b981" fillOpacity={0.1} strokeWidth={2.5} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
-        <ReportChart title="Por Método de Pagamento" isLoading={isLoading} isEmpty={!paymentMethodData.length}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={paymentMethodData} dataKey="total" nameKey="label" cx="50%" cy="50%" outerRadius={90} label>
-                {paymentMethodData.map((_, i) => (
-                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number) => chartTooltipFormatter(v)} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
-        </ReportChart>
+          <ChartCard
+            title="Receita por vendedor"
+            subtitle="Ranking de vendas pagas; responsáveis sem receita no período não aparecem."
+            isLoading={isLoading}
+            isEmpty={!data?.bySeller.length}
+            testId="sales-seller-chart"
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data?.bySeller.slice(0, 8)} layout="vertical" margin={{ left: 16, right: 16 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                <XAxis type="number" tickFormatter={compactCurrency} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="sellerName" width={120} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Bar dataKey="revenue" name="Receita paga" fill="#0ea5e9" radius={[0, 5, 5, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+      </DashboardSection>
 
-        <ReportChart title="Top 10 Produtos Mais Vendidos" isLoading={isLoading} isEmpty={!data?.byProduct?.length}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data?.byProduct.slice(0, 10)} layout="vertical" margin={{ left: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-100 dark:stroke-white/5" />
-              <XAxis type="number" tick={{ fontSize: 11 }} />
-              <YAxis type="category" dataKey="productName" tick={{ fontSize: 10 }} width={120} />
-              <Tooltip formatter={(v: number) => chartTooltipFormatter(v)} />
-              <Bar dataKey="revenue" name="Receita" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ReportChart>
+      <DashboardSection title="Pipeline" description="Distribuição atual das oportunidades abertas criadas no período, respeitando a ordem configurada das etapas.">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <ChartCard
+            title="Oportunidades por etapa"
+            subtitle="Quantidade de oportunidades abertas; não representa conversão histórica entre etapas."
+            isLoading={isLoading}
+            isEmpty={!pipelineData.length}
+            testId="sales-pipeline-funnel"
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <FunnelChart>
+                <Tooltip formatter={(value: number) => [`${value} oportunidade(s)`, 'Quantidade']} />
+                <Funnel data={pipelineData} dataKey="count" nameKey="stageName" stroke="#ffffff">
+                  {pipelineData.map((stage, index) => (
+                    <Cell key={stage.stageId} fill={stage.color || ['#0B2551', '#0ea5e9', '#10b981', '#8b5cf6'][index % 4]} />
+                  ))}
+                  <LabelList dataKey="stageName" position="right" fill="#475569" stroke="none" fontSize={11} />
+                </Funnel>
+              </FunnelChart>
+            </ResponsiveContainer>
+          </ChartCard>
 
-        <ReportChart title="Top 5 Clientes por Receita" isLoading={isLoading} isEmpty={!data?.topCustomers?.length}>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data?.topCustomers.slice(0, 5)}>
-              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-100 dark:stroke-white/5" />
-              <XAxis dataKey="customerName" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => chartTooltipFormatter(v)} />
-              <Bar dataKey="totalSpent" name="Total Gasto" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ReportChart>
-      </div>
+          <ChartCard
+            title="Principais motivos de perda"
+            subtitle="Motivos registrados nos negócios perdidos e fechados no período."
+            isLoading={isLoading}
+            isEmpty={!data?.lostReasons.length}
+            emptyMessage="Nenhum negócio perdido com motivo registrado neste período."
+            testId="sales-lost-reasons-chart"
+          >
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data?.lostReasons.slice(0, 8)} layout="vertical" margin={{ left: 20, right: 12 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                <YAxis type="category" dataKey="reason" width={140} tick={{ fontSize: 10, fill: '#6b7280' }} tickLine={false} axisLine={false} />
+                <Tooltip formatter={(value: number) => [`${value} oportunidade(s)`, 'Perdas']} />
+                <Bar dataKey="count" name="Perdas" fill="#f59e0b" radius={[0, 5, 5, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+        </div>
+      </DashboardSection>
 
-      <div className="bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl shadow-sm transition-colors duration-300 overflow-hidden">
-        <DataTable
-          data={data?.byProduct || []}
-          columns={columns}
-          isLoading={isLoading}
-          emptyIcon={<ShoppingCart className="w-12 h-12 text-[#10b981] mb-3" />}
-          emptyTitle="Nenhum dado de vendas encontrado"
-        />
-      </div>
+      <DashboardSection title="Ações comerciais" description="Registros que ajudam a sair do resumo e chegar ao trabalho operacional.">
+        <div className="grid grid-cols-1 gap-4 2xl:grid-cols-2">
+          <ReportDataTable
+            title="Oportunidades que precisam de atenção"
+            subtitle="Abertas há 14 dias ou mais sem atualização."
+            data={data?.stalledOpportunities || []}
+            columns={stalledColumns}
+            isLoading={isLoading}
+            emptyTitle="Nenhuma oportunidade parada"
+            emptySubtitle="As oportunidades abertas do período foram atualizadas recentemente."
+            onRowClick={() => navigate('/pipeline')}
+          />
+          <ReportDataTable
+            title="Vendas recentes"
+            subtitle="Últimas vendas válidas registradas no período."
+            data={data?.recentSales || []}
+            columns={recentColumns}
+            isLoading={isLoading}
+            emptyTitle="Nenhuma venda válida"
+            emptySubtitle="Vendas canceladas não são exibidas."
+            onRowClick={(row) => navigate(`/sales/${row.id}`)}
+          />
+        </div>
+      </DashboardSection>
     </div>
   );
 };

@@ -221,7 +221,7 @@ export interface AccountPayable {
 }
 
 export interface ReportPeriod {
-  type: '7d' | '30d' | '90d' | '12m' | 'custom';
+  type: 'today' | '7d' | 'current_month' | 'previous_month' | 'quarter' | 'year' | 'custom';
   dateFrom?: string;
   dateTo?: string;
 }

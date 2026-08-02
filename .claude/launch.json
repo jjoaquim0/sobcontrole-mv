@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "gestly",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5174
+    },
+    {
+      "name": "gestly-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--host", "localhost", "--port", "5180", "--strictPort"],
+      "port": 5180
+    }
+  ]
+}

@@ -55,3 +55,11 @@ Thumbs.db
 
 # Bundle gerado para deploy manual da Edge Function pelo editor web
 dist-edge/
+
+# Incremental build info do TypeScript
+*.tsbuildinfo
+
+# Scripts locais de manutenção do banco: contêm credenciais em texto plano
+# (management token da Supabase) e NUNCA devem ser versionados
+run_schema.mjs
+test_mgmt.mjs

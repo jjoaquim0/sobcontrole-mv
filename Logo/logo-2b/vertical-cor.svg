@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 130" width="220" height="130">
+  <g transform="translate(74,0)">
+  <path d="M50 21 A15 15 0 1 0 36 36" fill="none" stroke="#16193B" stroke-width="9" stroke-linecap="round"></path>
+  <path d="M22 51 A15 15 0 1 0 36 36" fill="none" stroke="#6D4AFF" stroke-width="9" stroke-linecap="round"></path>
+  </g>
+  <text x="26" y="115" font-family="Archivo, &#39;Helvetica Neue&#39;, Arial, sans-serif" font-weight="600" font-size="29" letter-spacing="-0.87" fill="#16193B">sobcontrole</text>
+</svg>

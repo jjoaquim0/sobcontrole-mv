@@ -5,7 +5,8 @@ import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
-import { TrendingUp, Mail, Lock, Loader2 } from 'lucide-react';
+import { Mail, Lock, Loader2 } from 'lucide-react';
+import { Logo } from '../../components/shared/brand';
 
 const loginSchema = z.object({
   email: z.string()
@@ -54,12 +55,14 @@ export const Login: React.FC = () => {
     <div className="min-h-screen bg-themeBg-light dark:bg-themeBg-dark flex items-center justify-center p-6 transition-colors duration-300">
       <div className="bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl shadow-xl p-8 max-w-md w-full transition-all duration-300">
         
-        {/* Logo Header */}
+        {/* Logo Header — lockup vertical, aplicação de login do manual de marca */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="bg-[#10b981] p-2 rounded-xl text-white mb-3 shadow-md shadow-emerald-500/10">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gestly</h1>
+          <Logo
+            orientation="vertical"
+            symbolClassName="w-12 h-12"
+            wordmarkClassName="text-2xl"
+            className="mb-2"
+          />
           <p className="text-sm text-themeText-secondaryLight dark:text-themeText-secondaryDark mt-1">
             Entre no painel administrativo de sua empresa
           </p>

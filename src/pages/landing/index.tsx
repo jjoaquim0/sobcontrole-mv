@@ -1,4 +1,5 @@
 import React from 'react';
+import { MotionConfig } from 'framer-motion';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import Navbar from './components/Navbar';
@@ -19,6 +20,14 @@ import Pricing from './components/Pricing';
 import FAQ from './components/FAQ';
 import FinalCTA from './components/FinalCTA';
 
+/**
+ * Faixa branca: alterna com o fundo cinza-azulado da página para criar ritmo
+ * vertical sem introduzir bordas ou sombras adicionais entre as seções.
+ */
+const Band: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="bg-landing-surface">{children}</div>
+);
+
 export const Landing: React.FC = () => {
   const { isAuthenticated } = useAuth();
 
@@ -28,36 +37,52 @@ export const Landing: React.FC = () => {
   }
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-[#0c0c0c] text-white">
-      <svg width="0" height="0" style={{ position: 'absolute' }}>
-        <filter id="c3-noise">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves={2} stitchTiles="stitch" />
-          <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 0" />
-          <feComposite in2="SourceGraphic" operator="in" result="noise" />
-          <feBlend in="SourceGraphic" in2="noise" mode="multiply" />
-        </filter>
-      </svg>
-
-      <div className="relative z-10">
+    // `landing-theme` declara os tokens `--landing-*` (src/index.css). O escopo
+    // garante que o tema claro não vaze para o app autenticado nem seja afetado
+    // pela classe `.dark` que o usuário possa ter salvo no <html>.
+    <MotionConfig reducedMotion="user">
+      <div className="landing-theme relative min-h-screen overflow-x-hidden bg-landing-bg text-landing-text">
         <Navbar />
-        <Hero />
-        <AllInOne />
-        <Inbox />
-        <FeatureTriage />
-        <Modules />
-        <GestlyHighlight />
-        <ValueFlow />
-        <LogoCloud />
-        <TargetAudience />
-        <Testimonials />
-        <Benefits />
-        <ProductPreview />
-        <Security />
-        <Pricing />
-        <FAQ />
-        <FinalCTA />
+
+        <main>
+          <Hero />
+
+          <Band>
+            <AllInOne />
+            <Inbox />
+          </Band>
+
+          <FeatureTriage />
+          <Modules />
+
+          <div className="bg-landing-surface-brand">
+            <GestlyHighlight />
+          </div>
+
+          <Band>
+            <ValueFlow />
+            <LogoCloud />
+            <TargetAudience />
+          </Band>
+
+          <Testimonials />
+          <Benefits />
+
+          <Band>
+            <ProductPreview />
+            <Security />
+          </Band>
+
+          <Pricing />
+
+          <Band>
+            <FAQ />
+          </Band>
+
+          <FinalCTA />
+        </main>
       </div>
-    </div>
+    </MotionConfig>
   );
 };
 

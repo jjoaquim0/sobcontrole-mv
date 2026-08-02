@@ -5,7 +5,8 @@ import * as z from 'zod';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { toast } from 'sonner';
-import { TrendingUp, Mail, Lock, Building2, User, FileDigit, Loader2 } from 'lucide-react';
+import { Mail, Lock, Building2, User, FileDigit, Loader2 } from 'lucide-react';
+import { Logo } from '../../components/shared/brand';
 
 const registerSchema = z.object({
   companyName: z.string()
@@ -96,12 +97,15 @@ export const Register: React.FC = () => {
     <div className="min-h-screen bg-themeBg-light dark:bg-themeBg-dark flex items-center justify-center p-6 transition-colors duration-300">
       <div className="bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl shadow-xl p-8 max-w-lg w-full transition-all duration-300">
         
-        {/* Logo Header */}
+        {/* Logo Header — lockup vertical, mesma aplicação da tela de login */}
         <div className="flex flex-col items-center text-center mb-6">
-          <div className="bg-[#10b981] p-2 rounded-xl text-white mb-3 shadow-md shadow-emerald-500/10">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Criar Conta Gestly</h1>
+          <Logo
+            orientation="vertical"
+            symbolClassName="w-12 h-12"
+            wordmarkClassName="text-2xl"
+            className="mb-4"
+          />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Criar sua conta</h1>
           <p className="text-sm text-themeText-secondaryLight dark:text-themeText-secondaryDark mt-1">
             Cadastre sua empresa e comece a gerenciar hoje mesmo
           </p>

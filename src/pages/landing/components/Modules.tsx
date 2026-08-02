@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { ArrowRight, CalendarDays, CreditCard, KanbanSquare, Package, Sparkles, Users, type LucideIcon } from 'lucide-react'
 import { SectionEyebrow } from './shared'
+import { focusRing } from '../landingTheme'
 
 interface ModuleItem {
   icon: LucideIcon
@@ -78,7 +79,7 @@ export default function Modules() {
           <br />
           por dentro.
         </h2>
-        <p className="mt-6 text-white/60 text-base leading-[1.6]">
+        <p className="mt-6 text-landing-text-secondary text-base leading-[1.6]">
           Cada módulo resolve uma parte real da operação — e todos conversam entre si, sem
           exportar planilha ou repetir cadastro.
         </p>
@@ -92,17 +93,17 @@ export default function Modules() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.6, delay: i * 0.06 }}
-            className="liquid-glass rounded-2xl p-6 flex flex-col"
+            className="landing-card rounded-2xl p-6 flex flex-col"
           >
-            <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-              <mod.icon className="w-4.5 h-4.5 text-white" aria-hidden="true" />
+            <div className="w-10 h-10 rounded-xl bg-landing-brand/10 flex items-center justify-center">
+              <mod.icon className="w-4.5 h-4.5 text-landing-brand" aria-hidden="true" />
             </div>
-            <h3 className="mt-4 text-base font-semibold text-white">{mod.name}</h3>
-            <p className="mt-2 text-sm text-white/60 leading-[1.55]">{mod.description}</p>
-            <p className="mt-3 text-xs text-white/40 leading-[1.5]">{mod.benefit}</p>
+            <h3 className="mt-4 text-base font-semibold text-landing-text">{mod.name}</h3>
+            <p className="mt-2 text-sm text-landing-text-secondary leading-[1.55]">{mod.description}</p>
+            <p className="mt-3 text-xs text-landing-text-muted leading-[1.5]">{mod.benefit}</p>
             <a
               href={mod.anchor}
-              className="group mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-white/80 hover:text-white rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d2ff] w-fit"
+              className={`group mt-5 inline-flex items-center gap-1.5 text-xs font-semibold text-landing-brand hover:text-landing-brand-hover rounded w-fit ${focusRing}`}
             >
               {mod.anchorLabel}
               <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />

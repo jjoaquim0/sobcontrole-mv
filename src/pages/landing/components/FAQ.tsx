@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronDown } from 'lucide-react'
 import { SectionEyebrow } from './shared'
+import { focusRing } from '../landingTheme'
 
 const faqs = [
   {
@@ -66,7 +67,7 @@ export default function FAQ() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.7, delay: 0.15 }}
-        className="mt-10 max-w-2xl mx-auto divide-y divide-white/10 border-t border-b border-white/10"
+        className="mt-10 max-w-2xl mx-auto rounded-2xl border border-landing-border bg-landing-surface shadow-landing divide-y divide-landing-border overflow-hidden"
       >
         {faqs.map((faq, i) => {
           const isOpen = openIndex === i
@@ -81,11 +82,13 @@ export default function FAQ() {
                   aria-expanded={isOpen}
                   aria-controls={panelId}
                   onClick={() => setOpenIndex(isOpen ? null : i)}
-                  className="w-full flex items-center justify-between gap-4 py-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d2ff] rounded"
+                  className={`w-full flex items-center justify-between gap-4 px-5 sm:px-6 py-5 text-left transition-colors hover:bg-landing-surface-muted ${focusRing} focus-visible:ring-inset focus-visible:ring-offset-0`}
                 >
-                  <span className="text-sm sm:text-base font-medium text-white">{faq.question}</span>
+                  <span className="text-sm sm:text-base font-medium text-landing-text">
+                    {faq.question}
+                  </span>
                   <ChevronDown
-                    className={`w-4 h-4 text-white/50 shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-landing-brand shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}
                     aria-hidden="true"
                   />
                 </button>
@@ -95,9 +98,11 @@ export default function FAQ() {
                 role="region"
                 aria-labelledby={buttonId}
                 hidden={!isOpen}
-                className="pb-5"
+                className="px-5 sm:px-6 pb-5"
               >
-                <p className="text-sm text-white/60 leading-[1.6] max-w-xl">{faq.answer}</p>
+                <p className="text-sm text-landing-text-secondary leading-[1.6] max-w-xl">
+                  {faq.answer}
+                </p>
               </div>
             </div>
           )

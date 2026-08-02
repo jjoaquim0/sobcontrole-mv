@@ -57,16 +57,16 @@ export default function ValueFlow() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.5, delay: i * 0.1 }}
-            className="liquid-glass rounded-2xl p-5"
+            className="landing-card rounded-2xl p-5"
           >
             <div className="flex items-center gap-2.5">
-              <span className="w-7 h-7 rounded-full bg-white/10 text-white text-xs font-bold flex items-center justify-center shrink-0">
+              <span className="w-7 h-7 rounded-full bg-landing-brand text-white text-xs font-bold flex items-center justify-center shrink-0">
                 {i + 1}
               </span>
-              <step.icon className="w-4 h-4 text-white/50" aria-hidden="true" />
+              <step.icon className="w-4 h-4 text-landing-accent" aria-hidden="true" />
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-white">{step.title}</h3>
-            <p className="mt-1.5 text-xs text-white/50 leading-[1.5]">{step.description}</p>
+            <h3 className="mt-3 text-sm font-semibold text-landing-text">{step.title}</h3>
+            <p className="mt-1.5 text-xs text-landing-text-muted leading-[1.5]">{step.description}</p>
           </motion.div>
         ))}
       </div>

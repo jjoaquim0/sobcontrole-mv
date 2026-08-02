@@ -8,29 +8,31 @@ const chips = [
   'Cruzamento de dados em tempo real',
 ]
 
+// Escala de prioridade em tokens da marca (mais escuro = mais urgente),
+// substituindo a antiga escala de cinzas pensada para fundo escuro.
 const buckets = [
   {
     label: 'Prioridade',
     count: 4,
-    color: '#ffffff',
+    dotClass: 'bg-landing-danger',
     items: ['Estoque parado — Produto X', 'Fluxo de caixa — atenção'],
   },
   {
     label: 'Acompanhar',
     count: 7,
-    color: '#e5e5e5',
+    dotClass: 'bg-landing-warning',
     items: ['Fornecedor Y — pagamento em 3 dias', 'Cliente Z — repetição de compra'],
   },
   {
     label: 'Atualizações',
     count: 18,
-    color: '#a3a3a3',
+    dotClass: 'bg-landing-brand',
     items: ['Nota fiscal importada', 'Planilha conciliada'],
   },
   {
     label: 'Arquivado',
     count: 13,
-    color: '#525252',
+    dotClass: 'bg-landing-text-muted',
     items: ['Vendas concluídas · Recibos · Relatórios'],
   },
 ]
@@ -51,7 +53,7 @@ export default function FeatureTriage() {
             <br />
             em um único olhar.
           </h2>
-          <p className="mt-6 text-white/60 text-base leading-[1.6] max-w-md">
+          <p className="mt-6 text-landing-text-secondary text-base leading-[1.6] max-w-md">
             O Gestly analisa clientes, estoque, vendas e caixa, e traduz tudo em respostas
             humanas. Nada de gráficos soltos — apenas decisões claras para aumentar sua margem.
           </p>
@@ -59,7 +61,7 @@ export default function FeatureTriage() {
             {chips.map((chip) => (
               <span
                 key={chip}
-                className="text-xs text-white/70 px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03]"
+                className="text-xs text-landing-text-secondary px-3 py-1.5 rounded-full border border-landing-border bg-landing-surface"
               >
                 {chip}
               </span>
@@ -67,24 +69,23 @@ export default function FeatureTriage() {
           </div>
         </motion.div>
 
-        <div className="liquid-glass rounded-2xl p-5">
-          <div className="text-xs text-white/50 mb-4">Hoje · 128 lançamentos analisados pela IA</div>
-          <div className="grid grid-cols-2 gap-3">
+        <div className="landing-card rounded-2xl p-5">
+          <div className="text-xs text-landing-text-muted mb-4">
+            Hoje · 128 lançamentos analisados pela IA
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {buckets.map((bucket) => (
-              <div key={bucket.label} className="liquid-glass rounded-lg p-3">
+              <div key={bucket.label} className="landing-panel rounded-lg p-3">
                 <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-xs font-semibold text-white">
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ background: bucket.color }}
-                    />
+                  <span className="flex items-center gap-2 text-xs font-semibold text-landing-text">
+                    <span className={`w-2 h-2 rounded-full ${bucket.dotClass}`} />
                     {bucket.label}
                   </span>
-                  <span className="text-xs text-white/40">{bucket.count}</span>
+                  <span className="text-xs text-landing-text-muted">{bucket.count}</span>
                 </div>
                 <div className="mt-2 space-y-1">
                   {bucket.items.map((item) => (
-                    <div key={item} className="text-[11px] text-white/50 truncate">
+                    <div key={item} className="text-[11px] text-landing-text-secondary truncate">
                       {item}
                     </div>
                   ))}

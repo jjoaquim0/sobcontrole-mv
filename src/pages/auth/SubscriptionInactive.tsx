@@ -2,6 +2,7 @@ import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, LogOut, MessageSquare } from 'lucide-react';
+import { Logo } from '../../components/shared/brand';
 
 export const SubscriptionInactive: React.FC = () => {
   const { signOut, company } = useAuth();
@@ -15,6 +16,11 @@ export const SubscriptionInactive: React.FC = () => {
   return (
     <div className="min-h-screen bg-themeBg-light dark:bg-themeBg-dark flex items-center justify-center p-6 transition-colors duration-300">
       <div className="bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl shadow-xl p-8 max-w-md w-full text-center transition-all duration-300">
+        {/* Marca — esta tela vive fora do app shell, sem sidebar para identificá-la */}
+        <div className="flex justify-center mb-6">
+          <Logo symbolClassName="w-7 h-7" wordmarkClassName="text-lg" />
+        </div>
+
         {/* Warning Icon */}
         <div className="w-16 h-16 bg-red-50 dark:bg-red-950/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
           <AlertTriangle className="w-8 h-8" />

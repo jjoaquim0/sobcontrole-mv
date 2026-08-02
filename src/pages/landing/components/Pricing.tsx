@@ -55,10 +55,10 @@ const plans: Plan[] = [
 
 function CheckIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path
         d="M20 6L9 17L4 12"
-        stroke="white"
+        stroke="currentColor"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -72,18 +72,7 @@ export default function Pricing() {
 
   return (
     <section className="c3-pricing-section">
-      <svg width="0" height="0" style={{ position: 'absolute' }}>
-        <filter id="c3-noise-pricing">
-          <feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves={2} stitchTiles="stitch" />
-          <feComponentTransfer>
-            <feFuncA type="linear" slope={0.075} />
-          </feComponentTransfer>
-          <feComposite in2="SourceGraphic" operator="in" result="noise" />
-          <feBlend in="SourceGraphic" in2="noise" mode="overlay" />
-        </filter>
-      </svg>
-
-      <div className="c3-watermark-container">
+      <div className="c3-watermark-container" aria-hidden="true">
         <div className="c3-watermark-main">
           <span className="c3-watermark-line-1">Sua gestão.</span>
           <span className="c3-watermark-line-2">Reinventada</span>
@@ -114,11 +103,15 @@ export default function Pricing() {
       </div>
 
       <div className="c3-toggle-wrap">
-        <span className="c3-toggle-label">Anual</span>
+        <span className="c3-toggle-label" id="c3-toggle-label">
+          Anual
+        </span>
         <button
+          type="button"
           className={`c3-toggle ${yearly ? 'active' : ''}`}
           onClick={() => setYearly((v) => !v)}
           aria-pressed={yearly}
+          aria-labelledby="c3-toggle-label"
         >
           <span className="c3-toggle-knob" />
         </button>

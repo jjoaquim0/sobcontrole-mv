@@ -23,11 +23,13 @@ const navItems = [
   { icon: Trash2, label: 'Lixeira' },
 ]
 
+// Pontos de categoria: classes de token em vez de hex fixo, para manter
+// contraste suficiente sobre a superfície clara.
 const labels = [
-  { name: 'Notas fiscais', color: '#00d2ff' },
-  { name: 'Fornecedores', color: '#A4F4FD' },
-  { name: 'Financeiro', color: '#f59e0b' },
-  { name: 'Clientes', color: '#10b981' },
+  { name: 'Notas fiscais', dotClass: 'bg-landing-brand' },
+  { name: 'Fornecedores', dotClass: 'bg-landing-accent' },
+  { name: 'Financeiro', dotClass: 'bg-landing-warning' },
+  { name: 'Clientes', dotClass: 'bg-landing-success' },
 ]
 
 const messages = [
@@ -81,59 +83,58 @@ export default function Inbox() {
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
-        transition={{ duration: 0.8, delay: 1.1, ease: [0.22, 1, 0.36, 1] }}
-        className="relative rounded-2xl overflow-hidden border border-white/10 bg-[#0e1014]/90 backdrop-blur-2xl"
+        transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
+        className="relative rounded-2xl overflow-hidden border border-landing-border bg-landing-surface shadow-landing-lg"
       >
-        <div className="h-11 flex items-center px-4 border-b border-white/10 relative">
+        <div className="h-11 flex items-center px-4 border-b border-landing-border bg-landing-surface-muted relative">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full" style={{ background: '#ff5f57' }} />
             <span className="w-3 h-3 rounded-full" style={{ background: '#febc2e' }} />
             <span className="w-3 h-3 rounded-full" style={{ background: '#28c840' }} />
           </div>
-          <span className="absolute left-1/2 -translate-x-1/2 text-xs text-white/50">
+          <span className="absolute left-1/2 -translate-x-1/2 text-xs text-landing-text-muted">
             Gestly — E-mail Inteligente
           </span>
         </div>
 
         <div className="grid grid-cols-12 h-[520px]">
           {/* Sidebar */}
-          <div className="col-span-3 border-r border-white/10 bg-black/30 p-4 flex flex-col">
-            <button className="rounded-lg bg-white text-black text-xs font-semibold px-3 py-2 flex items-center justify-center gap-2 mb-6">
-              <Sparkles className="w-3.5 h-3.5" />
+          <div className="hidden sm:flex sm:col-span-4 lg:col-span-3 border-r border-landing-border bg-landing-surface-muted p-4 flex-col">
+            <div className="rounded-lg bg-landing-brand text-white text-xs font-semibold px-3 py-2 flex items-center justify-center gap-2 mb-6">
+              <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
               Analisar com IA
-            </button>
+            </div>
 
             <nav className="flex flex-col gap-1">
               {navItems.map((item) => (
                 <div
                   key={item.label}
                   className={`flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-medium ${
-                    item.active ? 'bg-white/10 text-white' : 'text-white/60 hover:bg-white/5'
+                    item.active
+                      ? 'bg-landing-brand/10 text-landing-brand'
+                      : 'text-landing-text-secondary'
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <item.icon className="w-3.5 h-3.5" />
+                    <item.icon className="w-3.5 h-3.5" aria-hidden="true" />
                     {item.label}
                   </span>
-                  {item.count && <span className="text-white/40">{item.count}</span>}
+                  {item.count && <span className="text-landing-text-muted">{item.count}</span>}
                 </div>
               ))}
             </nav>
 
             <div className="mt-8">
-              <div className="text-[10px] uppercase tracking-wider text-white/40 px-2.5 mb-2">
+              <div className="text-[10px] uppercase tracking-wider text-landing-text-muted px-2.5 mb-2">
                 Categorias
               </div>
               <div className="flex flex-col gap-1">
                 {labels.map((label) => (
                   <div
                     key={label.name}
-                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-white/60 hover:bg-white/5"
+                    className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-landing-text-secondary"
                   >
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ background: label.color }}
-                    />
+                    <span className={`w-2 h-2 rounded-full ${label.dotClass}`} />
                     {label.name}
                   </div>
                 ))}
@@ -142,89 +143,96 @@ export default function Inbox() {
           </div>
 
           {/* Message list */}
-          <div className="col-span-4 border-r border-white/10 flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 text-white/40 text-xs">
-              <Search className="w-3.5 h-3.5" />
+          <div className="col-span-12 sm:col-span-8 lg:col-span-4 border-r border-landing-border flex flex-col">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-landing-border text-landing-text-muted text-xs">
+              <Search className="w-3.5 h-3.5" aria-hidden="true" />
               <span>Buscar e-mails</span>
             </div>
             <div className="flex-1 overflow-y-auto">
               {messages.map((msg) => (
                 <div
                   key={msg.subject}
-                  className={`px-4 py-3 border-b border-white/5 cursor-pointer ${
-                    msg.active ? 'bg-white/5' : 'hover:bg-white/[0.03]'
+                  className={`px-4 py-3 border-b border-landing-border ${
+                    msg.active ? 'bg-landing-brand/[0.07]' : ''
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <span
                       className={`text-xs ${
-                        msg.unread ? 'text-white font-semibold' : 'text-white/70 font-medium'
+                        msg.unread
+                          ? 'text-landing-text font-semibold'
+                          : 'text-landing-text-secondary font-medium'
                       }`}
                     >
                       {msg.name}
                     </span>
-                    <span className="text-[10px] text-white/40">{msg.time}</span>
+                    <span className="text-[10px] text-landing-text-muted">{msg.time}</span>
                   </div>
                   <div
                     className={`text-xs mt-0.5 ${
-                      msg.unread ? 'text-white/90' : 'text-white/60'
+                      msg.unread ? 'text-landing-text' : 'text-landing-text-secondary'
                     }`}
                   >
                     {msg.subject}
                   </div>
-                  <div className="text-[11px] text-white/40 mt-0.5 truncate">{msg.preview}</div>
+                  <div className="text-[11px] text-landing-text-muted mt-0.5 truncate">
+                    {msg.preview}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Reader */}
-          <div className="col-span-5 flex flex-col">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+          <div className="hidden lg:flex lg:col-span-5 flex-col">
+            <div className="flex items-center justify-between px-4 py-2 border-b border-landing-border">
               <div className="flex items-center gap-1">
                 {toolbarIcons.map((Icon, i) => (
-                  <button
+                  <span
                     key={i}
-                    className="w-7 h-7 rounded-md hover:bg-white/5 flex items-center justify-center"
+                    className="w-7 h-7 rounded-md flex items-center justify-center"
                   >
-                    <Icon className="w-3.5 h-3.5 text-white/60" />
-                  </button>
+                    <Icon className="w-3.5 h-3.5 text-landing-text-muted" aria-hidden="true" />
+                  </span>
                 ))}
               </div>
-              <button className="w-7 h-7 rounded-md hover:bg-white/5 flex items-center justify-center">
-                <MoreHorizontal className="w-3.5 h-3.5 text-white/60" />
-              </button>
+              <span className="w-7 h-7 rounded-md flex items-center justify-center">
+                <MoreHorizontal className="w-3.5 h-3.5 text-landing-text-muted" aria-hidden="true" />
+              </span>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5">
-              <h3 className="text-base font-semibold text-white">
+              <h3 className="text-base font-semibold text-landing-text">
                 Nota fiscal detectada no seu e-mail
               </h3>
               <div className="flex items-center gap-2 mt-3">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#00d2ff] to-[#0B2551] flex items-center justify-center text-xs font-semibold">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-landing-brand to-landing-text flex items-center justify-center text-xs font-semibold text-white">
                   G
                 </div>
                 <div className="text-xs">
-                  <span className="text-white font-medium">Gestly IA</span>
-                  <span className="text-white/40"> · para você · 9:41 AM</span>
+                  <span className="text-landing-text font-medium">Gestly IA</span>
+                  <span className="text-landing-text-muted"> · para você · 9:41 AM</span>
                 </div>
-                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full border border-white/10 text-white/60">
+                <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full border border-landing-border text-landing-text-secondary">
                   Financeiro
                 </span>
               </div>
 
-              <div className="liquid-glass rounded-lg p-3 mt-5 flex gap-2 items-start">
-                <Sparkles className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: '#A4F4FD' }} />
+              <div className="landing-panel rounded-lg p-3 mt-5 flex gap-2 items-start">
+                <Sparkles
+                  className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-landing-brand"
+                  aria-hidden="true"
+                />
                 <div>
-                  <div className="text-xs font-semibold text-white">Resumo pela IA Gestly</div>
-                  <div className="text-xs text-white/60 mt-1 leading-relaxed">
+                  <div className="text-xs font-semibold text-landing-text">Resumo pela IA Gestly</div>
+                  <div className="text-xs text-landing-text-secondary mt-1 leading-relaxed">
                     Identificamos uma nota fiscal de R$ 1.500 do fornecedor Silva Materiais.
                     Deseja anexar automaticamente ao sistema?
                   </div>
                 </div>
               </div>
 
-              <div className="mt-5 space-y-3 text-xs text-white/80 leading-relaxed">
+              <div className="mt-5 space-y-3 text-xs text-landing-text-secondary leading-relaxed">
                 <p>Olá,</p>
                 <p>
                   Nosso motor de IA monitorou sua caixa de entrada e encontrou um novo documento
@@ -238,11 +246,11 @@ export default function Inbox() {
                 <p>
                   Você pode revisar, editar ou aprovar o lançamento diretamente pelo Gestly.
                 </p>
-                <p className="text-white/50">— Equipe Gestly</p>
+                <p className="text-landing-text-muted">— Equipe Gestly</p>
               </div>
 
-              <div className="mt-5 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-white/10 text-xs text-white/70">
-                <Paperclip className="w-3.5 h-3.5" />
+              <div className="mt-5 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-landing-border text-xs text-landing-text-secondary">
+                <Paperclip className="w-3.5 h-3.5" aria-hidden="true" />
                 nota-fiscal-1500.pdf
               </div>
             </div>

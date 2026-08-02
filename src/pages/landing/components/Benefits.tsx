@@ -23,7 +23,7 @@ const benefits: { icon: LucideIcon; text: string }[] = [
 
 export default function Benefits() {
   return (
-    <section className="max-w-6xl mx-auto px-6 py-16 md:py-24 border-t border-white/10">
+    <section className="max-w-6xl mx-auto px-6 py-16 md:py-24 border-t border-landing-border">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -47,12 +47,12 @@ export default function Benefits() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.4 }}
             transition={{ duration: 0.4, delay: i * 0.05 }}
-            className="flex items-center gap-3 border border-white/10 rounded-xl p-4"
+            className="landing-card flex items-center gap-3 rounded-xl p-4"
           >
-            <span className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-              <benefit.icon className="w-4 h-4 text-white" aria-hidden="true" />
+            <span className="w-8 h-8 rounded-lg bg-landing-brand/10 flex items-center justify-center shrink-0">
+              <benefit.icon className="w-4 h-4 text-landing-brand" aria-hidden="true" />
             </span>
-            <span className="text-sm font-medium text-white/85">{benefit.text}</span>
+            <span className="text-sm font-medium text-landing-text-secondary">{benefit.text}</span>
           </motion.div>
         ))}
       </div>

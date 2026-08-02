@@ -27,7 +27,7 @@ const points: { icon: LucideIcon; title: string; description: string }[] = [
 
 export default function Security() {
   return (
-    <section className="max-w-6xl mx-auto px-6 py-16 md:py-24 border-t border-white/10">
+    <section className="max-w-6xl mx-auto px-6 py-16 md:py-24 border-t border-landing-border">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -51,14 +51,14 @@ export default function Security() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.5, delay: i * 0.08 }}
-            className="flex items-start gap-3.5 border border-white/10 rounded-xl p-4"
+            className="landing-card flex items-start gap-3.5 rounded-xl p-4"
           >
-            <span className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center shrink-0">
-              <point.icon className="w-4 h-4 text-white" aria-hidden="true" />
+            <span className="w-9 h-9 rounded-lg bg-landing-brand/10 flex items-center justify-center shrink-0">
+              <point.icon className="w-4 h-4 text-landing-brand" aria-hidden="true" />
             </span>
             <div>
-              <h3 className="text-sm font-semibold text-white">{point.title}</h3>
-              <p className="mt-1 text-xs text-white/50 leading-[1.5]">{point.description}</p>
+              <h3 className="text-sm font-semibold text-landing-text">{point.title}</h3>
+              <p className="mt-1 text-xs text-landing-text-muted leading-[1.5]">{point.description}</p>
             </div>
           </motion.div>
         ))}

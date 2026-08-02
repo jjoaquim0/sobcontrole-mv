@@ -22,17 +22,17 @@ const highlights = [
 
 export default function Testimonials() {
   return (
-    <section className="max-w-6xl mx-auto px-6 py-20 md:py-28 border-t border-white/10">
+    <section className="max-w-6xl mx-auto px-6 py-20 md:py-28 border-t border-landing-border">
       <div className="grid md:grid-cols-3 gap-6">
         {highlights.map((h) => (
-          <figure key={h.outcome} className="liquid-glass rounded-2xl p-6">
-            <blockquote className="text-sm text-white/80 leading-[1.6]">
+          <figure key={h.outcome} className="landing-card rounded-2xl p-6">
+            <blockquote className="text-sm text-landing-text-secondary leading-[1.6]">
               &ldquo;{h.quote}&rdquo;
             </blockquote>
-            <figcaption className="mt-6 pt-5 border-t border-white/10">
-              <div className="text-sm font-semibold text-white">{h.outcome}</div>
-              <div className="text-xs text-white/50">{h.detail}</div>
-              <div className="text-xs text-white font-semibold tracking-wide uppercase mt-1">
+            <figcaption className="mt-6 pt-5 border-t border-landing-border">
+              <div className="text-sm font-semibold text-landing-text">{h.outcome}</div>
+              <div className="text-xs text-landing-text-muted">{h.detail}</div>
+              <div className="text-xs text-landing-brand font-semibold tracking-wide uppercase mt-1">
                 {h.tag}
               </div>
             </figcaption>

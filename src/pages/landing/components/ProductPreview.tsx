@@ -11,7 +11,8 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react'
-import { SectionEyebrow } from './shared'
+import { LogoSymbol, SectionEyebrow } from './shared'
+import { focusRing } from '../landingTheme'
 
 type TabKey = 'dashboard' | 'pipeline' | 'financeiro' | 'estoque' | 'gestly'
 
@@ -25,9 +26,9 @@ const TABS: { key: TabKey; label: string; icon: LucideIcon }[] = [
 
 function Tile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="liquid-glass rounded-xl p-3">
-      <div className="text-[10px] uppercase tracking-wider text-white/40">{label}</div>
-      <div className="mt-1 text-sm font-semibold text-white">{value}</div>
+    <div className="landing-panel rounded-xl p-3">
+      <div className="text-[10px] uppercase tracking-wider text-landing-text-muted">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-landing-text">{value}</div>
     </div>
   )
 }
@@ -41,15 +42,17 @@ function DashboardPanel() {
         <Tile label="Ticket Médio" value="R$ 2.000" />
         <Tile label="Estoque Baixo" value="2 produtos" />
       </div>
-      <div className="mt-4 liquid-glass rounded-xl p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-white/50">Próximas Ações</div>
+      <div className="mt-4 landing-panel rounded-xl p-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-landing-text-muted">
+          Próximas Ações
+        </div>
         <ul className="mt-2 space-y-2">
-          <li className="text-xs text-white/70 flex items-center gap-2">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
+          <li className="text-xs text-landing-text-secondary flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 text-landing-warning shrink-0" aria-hidden="true" />
             Revise o estoque baixo
           </li>
-          <li className="text-xs text-white/70 flex items-center gap-2">
-            <ArrowDownCircle className="w-3.5 h-3.5 text-red-400 shrink-0" aria-hidden="true" />
+          <li className="text-xs text-landing-text-secondary flex items-center gap-2">
+            <ArrowDownCircle className="w-3.5 h-3.5 text-landing-danger shrink-0" aria-hidden="true" />
             Acompanhe os recebimentos vencidos
           </li>
         </ul>
@@ -69,11 +72,16 @@ function PipelinePanel() {
     <div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {columns.map((col) => (
-          <div key={col.name} className="liquid-glass rounded-xl p-3">
-            <div className="text-[10px] uppercase tracking-wider text-white/40 mb-2">{col.name}</div>
+          <div key={col.name} className="landing-panel rounded-xl p-3">
+            <div className="text-[10px] uppercase tracking-wider text-landing-text-muted mb-2">
+              {col.name}
+            </div>
             <div className="space-y-1.5">
               {col.deals.map((deal) => (
-                <div key={deal} className="text-xs text-white/75 bg-white/5 rounded-lg px-2 py-1.5">
+                <div
+                  key={deal}
+                  className="text-xs text-landing-text-secondary bg-landing-surface border border-landing-border rounded-lg px-2 py-1.5"
+                >
                   {deal}
                 </div>
               ))}
@@ -81,7 +89,9 @@ function PipelinePanel() {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[11px] text-white/35">Etapas totalmente personalizáveis pela sua equipe.</p>
+      <p className="mt-3 text-[11px] text-landing-text-muted">
+        Etapas totalmente personalizáveis pela sua equipe.
+      </p>
     </div>
   )
 }
@@ -94,10 +104,12 @@ function FinanceiroPanel() {
         <Tile label="A Pagar" value="R$ 3.500" />
         <Tile label="Vencidos a Receber" value="R$ 1.200" />
       </div>
-      <div className="mt-4 liquid-glass rounded-xl p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-white/50">Atenções no Caixa</div>
-        <div className="mt-2 flex items-center gap-2 text-xs text-white/70">
-          <ArrowUpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" aria-hidden="true" />
+      <div className="mt-4 landing-panel rounded-xl p-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-landing-text-muted">
+          Atenções no Caixa
+        </div>
+        <div className="mt-2 flex items-center gap-2 text-xs text-landing-text-secondary">
+          <ArrowUpCircle className="w-3.5 h-3.5 text-landing-warning shrink-0" aria-hidden="true" />
           Contas a pagar vencendo nos próximos dias
         </div>
       </div>
@@ -113,9 +125,11 @@ function EstoquePanel() {
         <Tile label="Recomendações Críticas" value="1" />
         <Tile label="Produtos Parados" value="5" />
       </div>
-      <div className="mt-4 liquid-glass rounded-xl p-4">
-        <div className="text-xs font-semibold uppercase tracking-wider text-white/50">Recomendação</div>
-        <p className="mt-2 text-xs text-white/70 leading-[1.5]">
+      <div className="mt-4 landing-panel rounded-xl p-4">
+        <div className="text-xs font-semibold uppercase tracking-wider text-landing-text-muted">
+          Recomendação
+        </div>
+        <p className="mt-2 text-xs text-landing-text-secondary leading-[1.5]">
           Planejar compra para atingir a cobertura alvo, com fornecedor sugerido a partir do
           histórico de compras do produto.
         </p>
@@ -128,7 +142,7 @@ function GestlyPanel() {
   const metrics = ['Negócios parados', 'Clientes em risco', 'Cobranças atrasadas', 'Ações sugeridas pela Gestly']
   return (
     <div>
-      <p className="text-xs text-white/60 leading-[1.6] max-w-md">
+      <p className="text-xs text-landing-text-secondary leading-[1.6] max-w-md">
         Central de alertas e recomendações inteligentes, priorizadas a partir dos dados reais da
         sua operação.
       </p>
@@ -136,7 +150,7 @@ function GestlyPanel() {
         {metrics.map((metric) => (
           <span
             key={metric}
-            className="text-xs text-white/70 px-3 py-1.5 rounded-full border border-white/10 bg-white/[0.03]"
+            className="text-xs text-landing-text-secondary px-3 py-1.5 rounded-full border border-landing-border bg-landing-surface-muted"
           >
             {metric}
           </span>
@@ -166,7 +180,7 @@ export default function ProductPreview() {
           <br />
           você vai usar todos os dias.
         </h2>
-        <p className="mt-6 text-white/60 text-base leading-[1.6]">
+        <p className="mt-6 text-landing-text-secondary text-base leading-[1.6]">
           Os mesmos módulos, indicadores e recomendações que aparecem dentro do sistema — com
           dados ilustrativos apenas para esta prévia.
         </p>
@@ -177,18 +191,25 @@ export default function ProductPreview() {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true, amount: 0.2 }}
         transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-        className="mt-10 rounded-2xl overflow-hidden border border-white/10 bg-[#0e1014]/90 backdrop-blur-2xl"
+        className="mt-10 rounded-2xl overflow-hidden border border-landing-border bg-landing-surface shadow-landing-lg"
       >
-        <div className="h-11 flex items-center px-4 border-b border-white/10 relative">
+        <div className="h-11 flex items-center px-4 border-b border-landing-border bg-landing-surface-muted relative">
           <div className="flex items-center gap-2">
             <span className="w-3 h-3 rounded-full" style={{ background: '#ff5f57' }} />
             <span className="w-3 h-3 rounded-full" style={{ background: '#febc2e' }} />
             <span className="w-3 h-3 rounded-full" style={{ background: '#28c840' }} />
           </div>
-          <span className="absolute left-1/2 -translate-x-1/2 text-xs text-white/50">SobControle</span>
+          <span className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-xs text-landing-text-muted">
+            <LogoSymbol className="w-4 h-4" variant="cor" />
+            SobControle
+          </span>
         </div>
 
-        <div role="tablist" aria-label="Módulos do SobControle" className="flex flex-wrap gap-1 p-3 border-b border-white/10">
+        <div
+          role="tablist"
+          aria-label="Módulos do SobControle"
+          className="flex flex-wrap gap-1 p-3 border-b border-landing-border"
+        >
           {TABS.map((tab) => {
             const isActive = tab.key === active
             return (
@@ -200,8 +221,10 @@ export default function ProductPreview() {
                 aria-selected={isActive}
                 aria-controls={`preview-panel-${tab.key}`}
                 onClick={() => setActive(tab.key)}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00d2ff] ${
-                  isActive ? 'bg-white text-black' : 'text-white/60 hover:bg-white/5 hover:text-white'
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors ${focusRing} ${
+                  isActive
+                    ? 'bg-landing-brand text-white'
+                    : 'text-landing-text-secondary hover:bg-landing-surface-muted hover:text-landing-text'
                 }`}
               >
                 <tab.icon className="w-3.5 h-3.5" aria-hidden="true" />

@@ -43,13 +43,13 @@ export default function AllInOne() {
           <br />
           sem planilhas espalhadas.
         </h2>
-        <p className="mt-6 text-white/60 text-base leading-[1.6]">
+        <p className="mt-6 text-landing-text-secondary text-base leading-[1.6]">
           O SobControle reúne toda a sua operação em um único sistema. Nada de arquivos soltos,
           controles paralelos ou informação espalhada entre ferramentas diferentes.
         </p>
       </motion.div>
 
-      <div className="mt-12 grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {areas.map((area, i) => (
           <motion.div
             key={area.title}
@@ -57,13 +57,13 @@ export default function AllInOne() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.3 }}
             transition={{ duration: 0.5, delay: i * 0.05 }}
-            className="liquid-glass rounded-2xl p-5"
+            className="landing-card rounded-2xl p-5"
           >
-            <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center">
-              <area.icon className="w-4 h-4 text-white" aria-hidden="true" />
+            <div className="w-9 h-9 rounded-lg bg-landing-brand/10 flex items-center justify-center">
+              <area.icon className="w-4 h-4 text-landing-brand" aria-hidden="true" />
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-white">{area.title}</h3>
-            <p className="mt-1 text-xs text-white/50 leading-[1.5]">{area.description}</p>
+            <h3 className="mt-3 text-sm font-semibold text-landing-text">{area.title}</h3>
+            <p className="mt-1 text-xs text-landing-text-muted leading-[1.5]">{area.description}</p>
           </motion.div>
         ))}
       </div>

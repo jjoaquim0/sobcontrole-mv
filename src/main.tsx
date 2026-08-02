@@ -9,6 +9,7 @@ import { useThemeStore } from './store/themeStore';
 import { supabase } from './lib/supabase';
 import { DatabaseErrorPage, DatabaseError } from './pages/error/DatabaseErrorPage';
 import { Loader2 } from 'lucide-react';
+import { Logo } from './components/shared/brand';
 import './index.css';
 
 // Configuração do TanStack Query v5
@@ -82,9 +83,18 @@ const AppInitializer = () => {
 
   if (isValidating) {
     return (
-      <div className="min-h-screen bg-[#0f1117] flex flex-col items-center justify-center text-white/50 gap-2">
-        <Loader2 className="w-8 h-8 animate-spin text-[#10b981]" />
-        <span className="text-xs font-semibold tracking-widest uppercase text-gray-500">Validando Conexão...</span>
+      <div className="min-h-screen bg-[#16193B] flex flex-col items-center justify-center text-white/50 gap-6">
+        {/* Splash de boot: fundo azul-noite da marca, lockup em versão escura. */}
+        <Logo
+          variant="escuro"
+          orientation="vertical"
+          symbolClassName="w-14 h-14"
+          wordmarkClassName="text-3xl"
+        />
+        <div className="flex flex-col items-center gap-2">
+          <Loader2 className="w-6 h-6 animate-spin text-[#8F76FF]" />
+          <span className="text-xs font-semibold tracking-widest uppercase text-white/40">Validando Conexão...</span>
+        </div>
       </div>
     );
   }

@@ -1,4 +1,3 @@
-import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { PublicRoute } from './PublicRoute';
 import { PrivateRoute } from './PrivateRoute';
@@ -13,6 +12,7 @@ import { Login } from '../pages/auth/Login';
 import { Register } from '../pages/auth/Register';
 import { SubscriptionInactive } from '../pages/auth/SubscriptionInactive';
 import { Dashboard } from '../pages/dashboard';
+import { Gestly } from '../pages/gestly';
 import { Sales, SaleDetailPage } from '../pages/sales';
 import { Pipeline } from '../pages/pipeline';
 import { Agenda } from '../pages/agenda';
@@ -81,6 +81,10 @@ export const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: <Dashboard />,
+      },
+      {
+        path: 'gestly',
+        element: <Gestly />,
       },
       {
         path: 'sales',

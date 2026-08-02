@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { MessageCircle, X } from 'lucide-react';
 
 interface ChatButtonProps {
@@ -8,6 +8,8 @@ interface ChatButtonProps {
 }
 
 export const ChatButton: React.FC<ChatButtonProps> = ({ isOpen, onToggle }) => {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <div className="fixed bottom-6 right-6 z-50 group">
       {!isOpen && (
@@ -17,14 +19,14 @@ export const ChatButton: React.FC<ChatButtonProps> = ({ isOpen, onToggle }) => {
       )}
 
       {!isOpen && (
-        <span className="absolute inset-0 rounded-full bg-[#00d2ff] animate-ping opacity-20" />
+        <span className="absolute inset-0 rounded-full bg-[#00d2ff] animate-ping opacity-20 motion-reduce:animate-none" />
       )}
 
       <motion.button
         type="button"
         onClick={onToggle}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        whileHover={prefersReducedMotion ? undefined : { scale: 1.05 }}
+        whileTap={prefersReducedMotion ? undefined : { scale: 0.95 }}
         aria-label={isOpen ? 'Fechar chat do Gestly' : 'Falar com Gestly'}
         className="relative flex items-center justify-center w-14 h-14 rounded-full text-white shadow-lg shadow-[#0B2551]/30 dark:shadow-black/40"
         style={{ background: 'linear-gradient(135deg, #0B2551 0%, #00d2ff 100%)' }}
@@ -32,10 +34,10 @@ export const ChatButton: React.FC<ChatButtonProps> = ({ isOpen, onToggle }) => {
         <AnimatePresence mode="wait" initial={false}>
           <motion.span
             key={isOpen ? 'close' : 'open'}
-            initial={{ rotate: -90, opacity: 0 }}
+            initial={prefersReducedMotion ? false : { rotate: -90, opacity: 0 }}
             animate={{ rotate: 0, opacity: 1 }}
-            exit={{ rotate: 90, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            exit={prefersReducedMotion ? undefined : { rotate: 90, opacity: 0 }}
+            transition={{ duration: prefersReducedMotion ? 0 : 0.2 }}
             className="flex items-center justify-center"
           >
             {isOpen ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}

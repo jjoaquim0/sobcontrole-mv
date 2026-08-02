@@ -3,7 +3,12 @@ import { vi } from 'vitest';
 
 const { sendChatMessage } = vi.hoisted(() => ({ sendChatMessage: vi.fn() }));
 
-vi.mock('@/services/chatService', () => ({ sendChatMessage }));
+vi.mock('@/services/chatService', async () => {
+  const actual = await vi.importActual<typeof import('@/services/chatService')>(
+    '@/services/chatService',
+  );
+  return { ...actual, sendChatMessage };
+});
 
 import { ChatPanel } from './ChatPanel';
 
@@ -23,7 +28,8 @@ describe('ChatPanel', () => {
 
     await waitFor(() =>
       expect(sendChatMessage).toHaveBeenCalledWith(
-        expect.arrayContaining([{ role: 'user', content: 'Como cadastro um cliente?' }])
+        expect.arrayContaining([{ role: 'user', content: 'Como cadastro um cliente?' }]),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       )
     );
     expect(await screen.findByText('Posso ajudar com o uso do Gestly.')).toBeInTheDocument();

@@ -30,10 +30,10 @@ vi.mock('../../hooks/useAnalyticsModules', () => ({
   }),
 }));
 
-const renderSidebar = (route = '/dashboard') =>
+const renderSidebar = (route = '/dashboard', isCollapsed = false) =>
   render(
     <MemoryRouter initialEntries={[route]}>
-      <Sidebar isCollapsed={false} onToggle={vi.fn()} />
+      <Sidebar isCollapsed={isCollapsed} onToggle={vi.fn()} />
     </MemoryRouter>
   );
 
@@ -74,6 +74,36 @@ describe('Sidebar reports accordion', () => {
 });
 
 describe('Sidebar surface', () => {
+  it('exibe a Gestly como navegação principal e destaca a rota ativa', () => {
+    renderSidebar('/gestly');
+
+    expect(screen.getByRole('link', { name: 'Gestly' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  it('exibe o lockup da marca quando expandida e só o símbolo quando recolhida', () => {
+    const { unmount } = renderSidebar();
+
+    const lockup = screen.getByRole('img', { name: 'SobControle' });
+    expect(lockup).toHaveTextContent('sobcontrole');
+    // Wordmark em Archivo 600, minúsculo e com tracking -3% (manual de marca).
+    expect(lockup.querySelector('span')).toHaveClass(
+      'font-brand',
+      'font-semibold',
+      'lowercase',
+      'tracking-[-0.03em]'
+    );
+
+    unmount();
+    renderSidebar('/dashboard', true);
+
+    // Recolhida, o lockup não cabe nos 120px mínimos: sobra só o ícone de app.
+    expect(screen.queryByRole('img', { name: 'SobControle' })).not.toBeInTheDocument();
+    expect(screen.getByRole('complementary').querySelector('.rounded-\\[22\\%\\]')).toBeInTheDocument();
+  });
+
   it('aplica o token de superfície nos temas claro e escuro', () => {
     renderSidebar();
 

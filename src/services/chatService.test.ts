@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase', () => ({
   },
 }));
 
-import { sendChatMessage } from './chatService';
+import { GestlyChatError, sendChatMessage } from './chatService';
 
 describe('sendChatMessage', () => {
   beforeEach(() => {
@@ -54,9 +54,16 @@ describe('sendChatMessage', () => {
       },
     });
 
-    await expect(sendChatMessage([{ role: 'user', content: 'Olá' }])).rejects.toThrow(
-      'O limite de uso da IA foi atingido. Tente novamente mais tarde ou fale com o administrador da empresa.',
-    );
+    const error = await sendChatMessage([
+      { role: 'user', content: 'Olá' },
+    ]).catch((requestError) => requestError);
+
+    expect(error).toBeInstanceOf(GestlyChatError);
+    expect(error).toMatchObject({
+      code: 'usage_limit_exceeded',
+      message:
+        'O limite de uso da IA foi atingido. Tente novamente mais tarde ou fale com o administrador da empresa.',
+    });
   });
 
   it('não repassa mensagem desconhecida do backend', async () => {
@@ -176,5 +183,32 @@ describe('sendChatMessage', () => {
       'get_sales_summary',
       'get_overdue_financial_items',
     ]);
+  });
+
+  it('propaga o AbortSignal e normaliza uma interrupção local', async () => {
+    const controller = new AbortController();
+    invoke.mockImplementation(
+      (_functionName, options: { signal?: AbortSignal }) =>
+        new Promise((resolve) => {
+          options.signal?.addEventListener('abort', () => {
+            resolve({ data: null, error: new Error('AbortError interno') });
+          });
+        }),
+    );
+
+    const request = sendChatMessage(
+      [{ role: 'user', content: 'Como está minha empresa?' }],
+      { signal: controller.signal },
+    );
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({
+      code: 'request_aborted',
+      message: 'Resposta interrompida.',
+    });
+    expect(invoke).toHaveBeenCalledWith(
+      'ai-gateway',
+      expect.objectContaining({ signal: controller.signal }),
+    );
   });
 });

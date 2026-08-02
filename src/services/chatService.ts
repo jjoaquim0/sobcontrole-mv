@@ -60,7 +60,7 @@ interface ChatFunctionResponse {
   request_id?: string;
 }
 
-const SAFE_ERROR_MESSAGES: Record<string, string> = {
+export const GESTLY_ERROR_MESSAGES = {
   unauthorized: 'Autenticação necessária.',
   company_not_found: 'Não foi possível validar sua empresa.',
   permission_denied: 'Você não tem permissão para usar a assistente de IA.',
@@ -75,15 +75,38 @@ const SAFE_ERROR_MESSAGES: Record<string, string> = {
     'Somente administradores e gerentes podem consultar informações financeiras.',
   invalid_tool_arguments: 'Não foi possível interpretar os filtros da consulta.',
   tool_unavailable:
-    'Essa consulta ainda não está disponível. Posso consultar vendas, clientes, estoque baixo ou contas vencidas.',
+    'Essa consulta ainda não está disponível. Tente uma das perguntas sugeridas pela Central Gestly.',
   tool_query_failed: 'Não foi possível consultar os dados agora. Tente novamente.',
   internal_error: 'Não foi possível conversar com a Gestly agora. Tente novamente.',
-};
+} as const;
+
+export type GestlyGatewayErrorCode = keyof typeof GESTLY_ERROR_MESSAGES;
+export type GestlyChatErrorCode =
+  | GestlyGatewayErrorCode
+  | 'request_aborted'
+  | 'invalid_response'
+  | 'unknown';
+
+export class GestlyChatError extends Error {
+  constructor(
+    public readonly code: GestlyChatErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'GestlyChatError';
+  }
+}
 
 const DEFAULT_ERROR_MESSAGE = 'Não foi possível conversar com a Gestly agora. Tente novamente.';
+const ABORTED_MESSAGE = 'Resposta interrompida.';
 
-const safeMessageForCode = (code: unknown): string | null =>
-  typeof code === 'string' ? SAFE_ERROR_MESSAGES[code] ?? null : null;
+const isGatewayErrorCode = (code: unknown): code is GestlyGatewayErrorCode =>
+  typeof code === 'string' && code in GESTLY_ERROR_MESSAGES;
+
+const errorForCode = (code: unknown): GestlyChatError =>
+  isGatewayErrorCode(code)
+    ? new GestlyChatError(code, GESTLY_ERROR_MESSAGES[code])
+    : new GestlyChatError('unknown', DEFAULT_ERROR_MESSAGE);
 
 const TOOL_NAMES = new Set<GestlyToolName>([
   'get_sales_summary',
@@ -157,20 +180,41 @@ const readFunctionErrorCode = async (error: unknown): Promise<string | null> => 
   }
 };
 
-export const sendChatMessage = async (messages: ChatMessage[]): Promise<ChatMessage> => {
-  const { data, error } = await supabase.functions.invoke<ChatFunctionResponse>('ai-gateway', {
-    body: {
-      messages: messages.map(({ role, content }) => ({ role, content })),
-    },
-  });
+interface SendChatMessageOptions {
+  signal?: AbortSignal;
+}
+
+export const sendChatMessage = async (
+  messages: ChatMessage[],
+  options: SendChatMessageOptions = {},
+): Promise<ChatMessage> => {
+  let result;
+  try {
+    result = await supabase.functions.invoke<ChatFunctionResponse>('ai-gateway', {
+      body: {
+        messages: messages.map(({ role, content }) => ({ role, content })),
+      },
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  } catch {
+    if (options.signal?.aborted) {
+      throw new GestlyChatError('request_aborted', ABORTED_MESSAGE);
+    }
+    throw new GestlyChatError('unknown', DEFAULT_ERROR_MESSAGE);
+  }
+
+  const { data, error } = result;
+
+  if (options.signal?.aborted) {
+    throw new GestlyChatError('request_aborted', ABORTED_MESSAGE);
+  }
 
   if (error) {
-    const safeMessage = safeMessageForCode(await readFunctionErrorCode(error));
-    throw new Error(safeMessage ?? DEFAULT_ERROR_MESSAGE);
+    throw errorForCode(await readFunctionErrorCode(error));
   }
 
   if (data?.error) {
-    throw new Error(safeMessageForCode(data.error.code) ?? DEFAULT_ERROR_MESSAGE);
+    throw errorForCode(data.error.code);
   }
 
   if (
@@ -179,7 +223,10 @@ export const sendChatMessage = async (messages: ChatMessage[]): Promise<ChatMess
     typeof data.message.content !== 'string' ||
     !data.message.content.trim()
   ) {
-    throw new Error('A Gestly retornou uma resposta inválida. Tente novamente.');
+    throw new GestlyChatError(
+      'invalid_response',
+      'A Gestly retornou uma resposta inválida. Tente novamente.',
+    );
   }
 
   const dataContexts = parseDataContexts(data.data_contexts);

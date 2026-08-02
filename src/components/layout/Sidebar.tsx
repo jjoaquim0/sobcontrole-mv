@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useAnalyticsModules } from '../../hooks/useAnalyticsModules';
 import { UserRole } from '../../types';
 import { REPORT_NAVIGATION_ITEMS, ReportsMenuIcon, type ReportNavigationItem } from '../../pages/reports/reportNavigation';
-import { LogoMark } from '../shared/brand';
+import { Logo, LogoAppIcon } from '../shared/brand';
 import {
   LayoutDashboard,
   ShoppingBag,
@@ -63,6 +63,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Principal',
       items: [
         { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+        { name: 'Gestly', path: '/gestly', icon: Sparkles },
       ],
     },
     {
@@ -114,18 +115,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
       {/* Header / Logo */}
       <div className="relative p-5 flex items-center justify-between border-b border-black/5 dark:border-white/10 h-16 shrink-0">
-        {!isCollapsed && (
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-[#0B2551] to-[#00d2ff] flex items-center justify-center text-white p-2 shadow-lg shadow-[#00d2ff]/10">
-              <LogoMark className="w-full h-full" />
-            </div>
-            <span className="font-bold text-lg text-gray-900 dark:text-white tracking-wide">Gestly</span>
-          </div>
-        )}
-        {isCollapsed && (
-          <div className="w-9 h-9 mx-auto rounded-xl bg-gradient-to-br from-[#0B2551] to-[#00d2ff] flex items-center justify-center text-white p-2 shadow-lg shadow-[#00d2ff]/10">
-            <LogoMark className="w-full h-full" />
-          </div>
+        {/* Expandido: lockup horizontal completo. Recolhido: ícone de app, que
+            é a única redução autorizada abaixo dos 120px do lockup. */}
+        {!isCollapsed ? (
+          <Logo symbolClassName="w-9 h-9" wordmarkClassName="text-xl" />
+        ) : (
+          <LogoAppIcon className="w-9 h-9 mx-auto" />
         )}
 
         {/* Collapse button floating on border */}

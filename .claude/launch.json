@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--host", "localhost", "--port", "5180", "--strictPort"],
       "port": 5180
+    },
+    {
+      "name": "gestly-prod",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--host", "localhost", "--port", "4173", "--strictPort"],
+      "port": 4173
     }
   ]
 }

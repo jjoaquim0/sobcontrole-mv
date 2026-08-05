@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { GlowOrbs, NoiseFilter } from '../shared/brand';
 import { ChatButton, ChatPanel } from '../chat';
+import { RouteFallback } from '../../routes/RouteFallback';
 
 export const AppLayout: React.FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -22,9 +23,13 @@ export const AppLayout: React.FC = () => {
         {/* Topbar / Header */}
         <Header />
 
-        {/* Área de conteúdo rolável */}
+        {/* Área de conteúdo rolável.
+            O Suspense fica aqui dentro para que sidebar e header permaneçam
+            montados enquanto o chunk da rota é baixado. */}
         <main className="flex-1 overflow-y-auto p-6 transition-colors duration-300">
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 

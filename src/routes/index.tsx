@@ -1,74 +1,138 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { PublicRoute } from './PublicRoute';
 import { PrivateRoute } from './PrivateRoute';
 import { RoleRoute } from './RoleRoute';
 import { AnalyticsModuleRoute } from './AnalyticsModuleRoute';
 import { LegacyReportsRedirect, ReportsRoleOutlet } from './ReportsRoutes';
-import { AppLayout } from '../components/layout/AppLayout';
+import { RouteFallback } from './RouteFallback';
 
-// Componentes das Páginas
-import { Landing } from '../pages/landing';
-import { Login } from '../pages/auth/Login';
-import { Register } from '../pages/auth/Register';
-import { SubscriptionInactive } from '../pages/auth/SubscriptionInactive';
-import { Dashboard } from '../pages/dashboard';
-import { Gestly } from '../pages/gestly';
-import { Sales, SaleDetailPage } from '../pages/sales';
-import { Pipeline } from '../pages/pipeline';
-import { Agenda } from '../pages/agenda';
-import { Notifications } from '../pages/notifications';
-import { Inventory, ProductDetailPage, StockRecommendationsPage } from '../pages/inventory';
-import { Customers, CustomerDetailPage } from '../pages/customers';
-import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
-import { Purchases, PurchaseDetailPage } from '../pages/purchases';
-import { Financial } from '../pages/financial';
-import { CommissionsPage, EmployeeDetailPage, EmployeesPage, PaymentsComingSoonPage, SalesGoalsPage, TeamDetailPage, TeamsPage } from '../pages/people';
-import { Tax, TaxSetupPage, TaxClassificationPage } from '../pages/tax';
-import {
-  ReportsCustomPage,
-  ReportsCustomersPage,
-  ReportsFinancialPage,
-  ReportsIntelligencePage,
-  ReportsInventoryPage,
-  ReportsOverviewPage,
-  ReportsSalesPage,
-} from '../pages/reports';
-import { Documents } from '../pages/documents';
-import { Company } from '../pages/company';
-import { Settings } from '../pages/settings';
-import { Profile } from '../pages/profile';
-import { Admin } from '../pages/admin';
+// O shell autenticado (sidebar, header, chat) também carrega sob demanda: quem
+// só visita a landing ou o login nunca baixa esse código.
+const AppLayout = lazy(() => import('../components/layout/AppLayout').then((m) => ({ default: m.AppLayout })));
+
+// Componentes das Páginas — carregados sob demanda para que cada rota vire um
+// chunk próprio. Páginas que compartilham o mesmo módulo (ex.: Sales e
+// SaleDetailPage) compartilham o mesmo chunk, o que é intencional.
+// O `.then` normaliza a exportação nomeada para default, exigido pelo lazy().
+const Landing = lazy(() => import('../pages/landing').then((m) => ({ default: m.Landing })));
+const Login = lazy(() => import('../pages/auth/Login').then((m) => ({ default: m.Login })));
+const Register = lazy(() => import('../pages/auth/Register').then((m) => ({ default: m.Register })));
+const SubscriptionInactive = lazy(() =>
+  import('../pages/auth/SubscriptionInactive').then((m) => ({ default: m.SubscriptionInactive })),
+);
+const Dashboard = lazy(() => import('../pages/dashboard').then((m) => ({ default: m.Dashboard })));
+const Gestly = lazy(() => import('../pages/gestly').then((m) => ({ default: m.Gestly })));
+const Sales = lazy(() => import('../pages/sales').then((m) => ({ default: m.Sales })));
+const SaleDetailPage = lazy(() => import('../pages/sales').then((m) => ({ default: m.SaleDetailPage })));
+const Pipeline = lazy(() => import('../pages/pipeline').then((m) => ({ default: m.Pipeline })));
+const Agenda = lazy(() => import('../pages/agenda').then((m) => ({ default: m.Agenda })));
+const Notifications = lazy(() =>
+  import('../pages/notifications').then((m) => ({ default: m.Notifications })),
+);
+const Inventory = lazy(() => import('../pages/inventory').then((m) => ({ default: m.Inventory })));
+const ProductDetailPage = lazy(() =>
+  import('../pages/inventory').then((m) => ({ default: m.ProductDetailPage })),
+);
+const StockRecommendationsPage = lazy(() =>
+  import('../pages/inventory').then((m) => ({ default: m.StockRecommendationsPage })),
+);
+const Customers = lazy(() => import('../pages/customers').then((m) => ({ default: m.Customers })));
+const CustomerDetailPage = lazy(() =>
+  import('../pages/customers').then((m) => ({ default: m.CustomerDetailPage })),
+);
+const Suppliers = lazy(() => import('../pages/suppliers').then((m) => ({ default: m.Suppliers })));
+const SupplierDetailPage = lazy(() =>
+  import('../pages/suppliers').then((m) => ({ default: m.SupplierDetailPage })),
+);
+const Purchases = lazy(() => import('../pages/purchases').then((m) => ({ default: m.Purchases })));
+const PurchaseDetailPage = lazy(() =>
+  import('../pages/purchases').then((m) => ({ default: m.PurchaseDetailPage })),
+);
+const Financial = lazy(() => import('../pages/financial').then((m) => ({ default: m.Financial })));
+const EmployeesPage = lazy(() => import('../pages/people').then((m) => ({ default: m.EmployeesPage })));
+const EmployeeDetailPage = lazy(() =>
+  import('../pages/people').then((m) => ({ default: m.EmployeeDetailPage })),
+);
+const CommissionsPage = lazy(() =>
+  import('../pages/people').then((m) => ({ default: m.CommissionsPage })),
+);
+const TeamsPage = lazy(() => import('../pages/people').then((m) => ({ default: m.TeamsPage })));
+const TeamDetailPage = lazy(() => import('../pages/people').then((m) => ({ default: m.TeamDetailPage })));
+const SalesGoalsPage = lazy(() => import('../pages/people').then((m) => ({ default: m.SalesGoalsPage })));
+const PaymentsComingSoonPage = lazy(() =>
+  import('../pages/people').then((m) => ({ default: m.PaymentsComingSoonPage })),
+);
+const Tax = lazy(() => import('../pages/tax').then((m) => ({ default: m.Tax })));
+const TaxSetupPage = lazy(() => import('../pages/tax').then((m) => ({ default: m.TaxSetupPage })));
+const TaxClassificationPage = lazy(() =>
+  import('../pages/tax').then((m) => ({ default: m.TaxClassificationPage })),
+);
+const ReportsOverviewPage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsOverviewPage })),
+);
+const ReportsIntelligencePage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsIntelligencePage })),
+);
+const ReportsSalesPage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsSalesPage })),
+);
+const ReportsCustomersPage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsCustomersPage })),
+);
+const ReportsFinancialPage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsFinancialPage })),
+);
+const ReportsInventoryPage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsInventoryPage })),
+);
+const ReportsCustomPage = lazy(() =>
+  import('../pages/reports').then((m) => ({ default: m.ReportsCustomPage })),
+);
+const Documents = lazy(() => import('../pages/documents').then((m) => ({ default: m.Documents })));
+const Company = lazy(() => import('../pages/company').then((m) => ({ default: m.Company })));
+const Settings = lazy(() => import('../pages/settings').then((m) => ({ default: m.Settings })));
+const Profile = lazy(() => import('../pages/profile').then((m) => ({ default: m.Profile })));
+const Admin = lazy(() => import('../pages/admin').then((m) => ({ default: m.Admin })));
+
+/**
+ * As rotas privadas herdam o Suspense do AppLayout. As públicas ficam fora dele,
+ * então precisam do próprio limite de Suspense.
+ */
+const publicSuspense = (element: ReactNode) => (
+  <Suspense fallback={<RouteFallback fullScreen />}>{element}</Suspense>
+);
 
 export const router = createBrowserRouter([
   // Página inicial pública de marketing/landing
   {
     path: '/',
-    element: <Landing />,
+    element: publicSuspense(<Landing />),
   },
   // Rotas de Autenticação Públicas (bloqueadas para quem já está logado)
   {
     path: '/login',
-    element: (
+    element: publicSuspense(
       <PublicRoute>
         <Login />
-      </PublicRoute>
+      </PublicRoute>,
     ),
   },
   {
     path: '/register',
-    element: (
+    element: publicSuspense(
       <PublicRoute>
         <Register />
-      </PublicRoute>
+      </PublicRoute>,
     ),
   },
   // Bloqueio de assinatura inativa (requer login, mas ignora o bloqueio de assinatura ativa)
   {
     path: '/subscription-inactive',
-    element: (
+    element: publicSuspense(
       <PrivateRoute allowInactiveSubscription={true}>
         <SubscriptionInactive />
-      </PrivateRoute>
+      </PrivateRoute>,
     ),
   },
   // Rotas da Aplicação Privadas e Multi-tenant
@@ -76,7 +140,9 @@ export const router = createBrowserRouter([
     path: '/',
     element: (
       <PrivateRoute>
-        <AppLayout />
+        <Suspense fallback={<RouteFallback fullScreen />}>
+          <AppLayout />
+        </Suspense>
       </PrivateRoute>
     ),
     children: [

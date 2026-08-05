@@ -2,11 +2,13 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/useAuth';
-import { toast } from 'sonner';
-import { Mail, Lock, Loader2 } from 'lucide-react';
-import { Logo } from '../../components/shared/brand';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { CheckCircle2, CircleAlert, Loader2, Mail } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { focusRing } from '@/pages/landing/landingTheme';
+import { AuthLayout } from './components/AuthLayout';
+import { AuthField, PasswordField } from './components/AuthField';
+import { getFriendlyAuthError } from './authMessages';
 
 const loginSchema = z.object({
   email: z.string()
@@ -18,14 +20,19 @@ const loginSchema = z.object({
 
 type LoginFields = z.infer<typeof loginSchema>;
 
+interface LoginLocationState {
+  emailConfirmationRequired?: boolean;
+}
+
 export const Login: React.FC = () => {
   const { signIn, isLoading, error, isAuthenticated, clearError } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const {
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<LoginFields>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -35,125 +42,115 @@ export const Login: React.FC = () => {
   });
 
   useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard', { replace: true });
     }
   }, [isAuthenticated, navigate]);
 
-  useEffect(() => {
-    if (error) {
-      toast.error(error);
-      clearError();
-    }
-  }, [error, clearError]);
-
   const onSubmit = async (data: LoginFields) => {
     await signIn(data.email, data.password);
   };
 
+  const busy = isLoading || isSubmitting;
+  const friendlyError = getFriendlyAuthError(error, 'login');
+  const locationState = location.state as LoginLocationState | null;
+
   return (
-    <div className="min-h-screen bg-themeBg-light dark:bg-themeBg-dark flex items-center justify-center p-6 transition-colors duration-300">
-      <div className="bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl shadow-xl p-8 max-w-md w-full transition-all duration-300">
-        
-        {/* Logo Header — lockup vertical, aplicação de login do manual de marca */}
-        <div className="flex flex-col items-center text-center mb-8">
-          <Logo
-            orientation="vertical"
-            symbolClassName="w-12 h-12"
-            wordmarkClassName="text-2xl"
-            className="mb-2"
-          />
-          <p className="text-sm text-themeText-secondaryLight dark:text-themeText-secondaryDark mt-1">
-            Entre no painel administrativo de sua empresa
+    <AuthLayout eyebrow="Acesso seguro ao SobControle">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-landing-brand">
+          Área do cliente
+        </p>
+        <h1 className="mt-3 text-3xl font-semibold tracking-[-0.025em] text-landing-text sm:text-4xl">
+          Bem-vindo de volta
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-landing-text-secondary sm:text-base">
+          Entre para acompanhar sua operação e continuar de onde parou.
+        </p>
+      </header>
+
+      {locationState?.emailConfirmationRequired && (
+        <div
+          role="status"
+          className="mt-6 flex items-start gap-3 rounded-xl border border-landing-success/25 bg-landing-success/10 p-4 text-sm leading-6 text-landing-success"
+        >
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <p>
+            Cadastro recebido. Confira seu e-mail para confirmar a conta antes de entrar.
           </p>
         </div>
+      )}
 
-        {/* Form */}
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          
-          {/* Email field */}
-          <div className="space-y-1">
-            <label className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-              E-mail corporativo
-            </label>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
-                <Mail className="w-4 h-4" />
-              </span>
-              <input
-                type="email"
-                placeholder="nome@empresa.com"
-                {...register('email')}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:ring-2 focus:ring-[#10b981] focus:border-transparent transition-all duration-200"
-              />
-            </div>
-            {errors.email && (
-              <p className="text-xs text-red-500 font-medium">{errors.email.message}</p>
-            )}
-          </div>
-
-          {/* Password field */}
-          <div className="space-y-1">
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Sua senha
-              </label>
-              <a href="#" className="text-xs text-[#10b981] hover:underline" onClick={(e) => {
-                e.preventDefault();
-                toast.info('Para fins de demonstração, use a senha definida.');
-              }}>
-                Esqueceu a senha?
-              </a>
-            </div>
-            <div className="relative">
-              <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400">
-                <Lock className="w-4 h-4" />
-              </span>
-              <input
-                type="password"
-                placeholder="••••••••"
-                {...register('password')}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 dark:border-white/10 rounded-xl bg-white dark:bg-white/5 text-sm text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 outline-none focus:ring-2 focus:ring-[#10b981] focus:border-transparent transition-all duration-200"
-              />
-            </div>
-            {errors.password && (
-              <p className="text-xs text-red-500 font-medium">{errors.password.message}</p>
-            )}
-          </div>
-
-          {/* Submit CTA */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-[#10b981] hover:bg-[#059669] text-white rounded-xl py-3 px-4 text-sm font-semibold flex items-center justify-center gap-2 transition-colors duration-200 shadow-md shadow-emerald-500/10 disabled:opacity-50 mt-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Entrando no Gestly...
-              </>
-            ) : (
-              'Acessar Sistema'
-            )}
-          </button>
-        </form>
-
-        {/* Demo credentials hint */}
-        <div className="mt-6 p-3 rounded-xl bg-gray-50 dark:bg-white/[0.02] border border-gray-100 dark:border-white/5 text-xs text-center text-gray-500 dark:text-gray-400">
-          Acesso rápido demonstrativo:<br />
-          <span className="font-semibold text-gray-700 dark:text-gray-300">admin@gestly.com</span> / <span className="font-semibold text-gray-700 dark:text-gray-300">123456</span>
+      {friendlyError && (
+        <div
+          role="alert"
+          className="mt-6 flex items-start gap-3 rounded-xl border border-landing-danger/25 bg-landing-danger/10 p-4 text-sm leading-6 text-landing-danger"
+        >
+          <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+          <p>{friendlyError}</p>
         </div>
+      )}
 
-        {/* Toggle signup link */}
-        <div className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-white/5 pt-6">
-          Ainda não tem conta?{' '}
-          <Link to="/register" className="text-[#10b981] font-semibold hover:underline">
-            Cadastre sua PME
-          </Link>
-        </div>
+      <form
+        noValidate
+        aria-busy={busy}
+        onSubmit={handleSubmit(onSubmit)}
+        className="mt-7 space-y-5"
+      >
+        <AuthField
+          id="login-email"
+          type="email"
+          label="E-mail"
+          placeholder="nome@empresa.com"
+          autoComplete="email"
+          inputMode="email"
+          icon={Mail}
+          disabled={busy}
+          error={errors.email?.message}
+          {...register('email')}
+        />
 
-      </div>
-    </div>
+        <PasswordField
+          id="login-password"
+          label="Senha"
+          placeholder="Digite sua senha"
+          autoComplete="current-password"
+          disabled={busy}
+          error={errors.password?.message}
+          {...register('password')}
+        />
+
+        <button
+          type="submit"
+          disabled={busy}
+          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-landing-brand px-4 text-sm font-semibold text-white shadow-landing transition-colors hover:bg-landing-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-landing-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              Entrando...
+            </>
+          ) : (
+            'Entrar'
+          )}
+        </button>
+      </form>
+
+      <p className="mt-7 border-t border-landing-border pt-6 text-center text-sm text-landing-text-secondary">
+        Ainda não tem conta?{' '}
+        <Link
+          to="/register"
+          className={`rounded-sm font-semibold text-landing-brand transition-colors hover:text-landing-brand-hover ${focusRing}`}
+        >
+          Criar conta
+        </Link>
+      </p>
+    </AuthLayout>
   );
 };
+
 export default Login;

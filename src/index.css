@@ -111,14 +111,14 @@
 /* ==========================================================================
    Landing page pública (Gestly marketing) — TEMA CLARO
    --------------------------------------------------------------------------
-   Todos os tokens abaixo são declarados em `.landing-theme`, aplicada apenas
-   no root de `src/pages/landing/index.tsx`. Nada aqui alcança o app logado
-   (dashboard, sidebar, chat, telas financeiras/estoque), mesmo quando o
-   usuário tem o tema escuro salvo (classe `.dark` no <html>).
+   Todos os tokens abaixo são declarados nos escopos públicos `.landing-theme`
+   e `.auth-theme`. Nada aqui alcança o app logado (dashboard, sidebar, chat,
+   telas financeiras/estoque), mesmo quando o usuário tem o tema escuro salvo
+   (classe `.dark` no <html>).
    Valores em canais RGB para permitir modificador de opacidade do Tailwind
    (ex.: `bg-landing-brand/10`).
    ========================================================================== */
-.landing-theme {
+:where(.landing-theme, .auth-theme) {
   /* Superfícies */
   --landing-background: 245 248 252; /* #F5F8FC — cinza-azulado muito claro */
   --landing-surface: 255 255 255; /* #FFFFFF — cards */

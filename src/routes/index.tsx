@@ -22,6 +22,7 @@ import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
 import { Purchases, PurchaseDetailPage } from '../pages/purchases';
 import { Financial } from '../pages/financial';
+import { Tax, TaxSetupPage, TaxClassificationPage } from '../pages/tax';
 import {
   ReportsCustomPage,
   ReportsCustomersPage,
@@ -155,6 +156,32 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={['admin', 'manager']}>
             <Financial />
+          </RoleRoute>
+        ),
+      },
+      {
+        // Dado tributário é dado financeiro: mesmo controle de papel de
+        // /financial, reforçado no banco pelas políticas de is_tax_manager().
+        path: 'contabil',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <Tax />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'contabil/configuracao',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <TaxSetupPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'contabil/classificacao',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <TaxClassificationPage />
           </RoleRoute>
         ),
       },

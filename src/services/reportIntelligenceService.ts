@@ -406,6 +406,53 @@ export interface DREEntry {
   value: number;
 }
 
+interface TaxObligationRow {
+  amount: number;
+  /** Espelha tax_assessments.status da apuração de origem. */
+  assessment_status: string | null;
+}
+
+/**
+ * Guias tributárias da competência. A guia é a fonte da verdade do valor: ela
+ * carrega o valor confirmado pelo contador quando existe, e a estimativa
+ * enquanto não existe.
+ */
+const fetchTaxObligationsForPeriod = async (
+  companyId: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<TaxObligationRow[]> => {
+  const { data, error } = await supabase
+    .from('tax_obligations')
+    .select('amount, tax_assessments(status)')
+    .eq('company_id', companyId)
+    .neq('status', 'canceled')
+    .gte('reference_month', dateFrom)
+    .lte('reference_month', dateTo);
+
+  // Ausência do módulo tributário não pode derrubar a DRE, que já existia antes
+  // dele. Sem apuração, a linha de imposto simplesmente fica zerada.
+  if (error || !data) return [];
+
+  return data.map((row) => {
+    const assessment = (row as { tax_assessments?: { status?: string } | null }).tax_assessments;
+    return {
+      amount: Number((row as { amount?: number }).amount ?? 0),
+      assessment_status: assessment?.status ?? null,
+    };
+  });
+};
+
+const resolveTaxOrigin = (
+  obligations: TaxObligationRow[],
+): 'confirmado' | 'estimado' | 'misto' | 'indisponivel' => {
+  if (obligations.length === 0) return 'indisponivel';
+  const confirmed = obligations.filter((row) => row.assessment_status === 'confirmed').length;
+  if (confirmed === obligations.length) return 'confirmado';
+  if (confirmed === 0) return 'estimado';
+  return 'misto';
+};
+
 export interface DREReport {
   entries: DREEntry[];
   period: { dateFrom: string; dateTo: string };
@@ -413,11 +460,14 @@ export interface DREReport {
     grossRevenue: number;
     additions: number;
     deductions: number;
+    taxes: number;
     netRevenue: number;
     totalExpenses: number;
     netProfit: number;
     profitMargin: number;
   };
+  /** Origem do valor de imposto exibido, para o card declarar de onde veio. */
+  taxOrigin: 'confirmado' | 'estimado' | 'misto' | 'indisponivel';
   basisNote: string;
 }
 
@@ -425,7 +475,7 @@ export const getDREReport = async (dateFrom: string, dateTo: string): Promise<DR
   await assertFinancialReportAccess();
   const companyId = requireCompanyId();
 
-  const [sales, purchases, manualExpenses] = await Promise.all([
+  const [sales, purchases, manualExpenses, taxObligations] = await Promise.all([
     fetchSales(companyId, dateFrom, dateTo),
     fetchPurchases(companyId, dateFrom, dateTo),
     fetchAllPages<PayableRow>((from, to) =>
@@ -434,10 +484,14 @@ export const getDREReport = async (dateFrom: string, dateTo: string): Promise<DR
         .select('id, amount, status, due_date, description, supplier_id, purchase_id')
         .eq('company_id', companyId)
         .is('purchase_id', null)
+        // Guias tributárias saem daqui e entram na linha de impostos. Sem esta
+        // exclusão o mesmo valor seria contado duas vezes.
+        .neq('origin', 'tax')
         .gte('due_date', dateFrom)
         .lte('due_date', dateTo)
         .order('due_date')
         .range(from, to)),
+    fetchTaxObligationsForPeriod(companyId, dateFrom, dateTo),
   ]);
 
   const paidSales = sales.filter((sale) => sale.payment_status === 'paid');
@@ -447,8 +501,21 @@ export const getDREReport = async (dateFrom: string, dateTo: string): Promise<DR
   const netRevenue = sum(paidSales, (sale) => Number(sale.final_value));
   const costs = sum(purchases.filter((purchase) => purchase.status === 'paid'), (purchase) => Number(purchase.final_value));
   const operatingExpenses = sum(manualExpenses.filter((expense) => expense.status === 'paid'), (expense) => Number(expense.amount));
-  const netProfit = netRevenue - costs - operatingExpenses;
+  // A margem exibida antes desta linha ignorava o imposto e era otimista em
+  // 4% a 19% da receita, dependendo do anexo e da faixa.
+  const taxes = sum(taxObligations, (obligation) => Number(obligation.amount));
+  const taxOrigin = resolveTaxOrigin(taxObligations);
+  const netProfit = netRevenue - costs - operatingExpenses - taxes;
   const profitMargin = netRevenue ? (netProfit / netRevenue) * 100 : 0;
+
+  const taxNote =
+    taxOrigin === 'indisponivel'
+      ? ' Impostos não incluídos: nenhuma apuração tributária no período.'
+      : taxOrigin === 'confirmado'
+        ? ' Impostos pelo valor confirmado com o contador.'
+        : taxOrigin === 'misto'
+          ? ' Impostos por valor confirmado onde há confirmação e estimado nas demais competências.'
+          : ' Impostos por estimativa gerencial, ainda não confirmada pelo contador.';
 
   return {
     entries: [
@@ -459,11 +526,22 @@ export const getDREReport = async (dateFrom: string, dateTo: string): Promise<DR
       { category: '(-) COMPRAS E CUSTOS DIRETOS', type: 'expense', value: costs },
       { category: '(=) RESULTADO BRUTO', type: 'total', value: netRevenue - costs },
       { category: '(-) DESPESAS OPERACIONAIS MANUAIS', type: 'expense', value: operatingExpenses },
+      { category: '(-) IMPOSTOS SOBRE VENDAS', type: 'deduction', value: taxes },
       { category: '(=) RESULTADO LÍQUIDO GERENCIAL', type: 'total', value: netProfit },
     ],
     period: { dateFrom, dateTo },
-    summary: { grossRevenue, additions, deductions, netRevenue, totalExpenses: costs + operatingExpenses, netProfit, profitMargin },
-    basisNote: 'DRE gerencial: vendas e compras pagas pela data de registro; despesas manuais pagas pelo vencimento. Não substitui escrituração contábil.',
+    summary: {
+      grossRevenue,
+      additions,
+      deductions,
+      taxes,
+      netRevenue,
+      totalExpenses: costs + operatingExpenses + taxes,
+      netProfit,
+      profitMargin,
+    },
+    taxOrigin,
+    basisNote: `DRE gerencial: vendas e compras pagas pela data de registro; despesas manuais pagas pelo vencimento.${taxNote} Não substitui escrituração contábil.`,
   };
 };
 

@@ -16,6 +16,9 @@ import {
   CalendarDays,
   Bell,
   CreditCard,
+  Landmark,
+  Layers,
+  SlidersHorizontal,
   FileText,
   Building2,
   Settings,
@@ -39,6 +42,8 @@ interface MenuItem {
   icon: React.ComponentType<{ className?: string }>;
   roles?: UserRole[];
   children?: readonly ReportNavigationItem[];
+  /** Casa apenas a rota exata. Necessário quando o path é prefixo de sub-rotas. */
+  end?: boolean;
 }
 
 interface MenuSection {
@@ -85,6 +90,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         { name: 'Financeiro', path: '/financial', icon: CreditCard, roles: ['admin', 'manager'] },
         { name: 'Relatórios', path: '/relatorios', icon: ReportsMenuIcon, roles: ['admin', 'manager'], children: REPORT_NAVIGATION_ITEMS },
         { name: 'Documentos', path: '/documents', icon: FileText },
+      ],
+    },
+    {
+      // Seção isolada: o módulo contábil está em avaliação e vive separado do
+      // restante do sistema até ser validado com o contador.
+      title: 'Contábil',
+      items: [
+        { name: 'Visão Geral', path: '/contabil', icon: Landmark, roles: ['admin', 'manager'], end: true },
+        { name: 'Classificação Fiscal', path: '/contabil/classificacao', icon: Layers, roles: ['admin', 'manager'] },
+        { name: 'Configuração Fiscal', path: '/contabil/configuracao', icon: SlidersHorizontal, roles: ['admin', 'manager'] },
       ],
     },
     {
@@ -220,6 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                     <NavLink
                       key={item.path}
                       to={item.path}
+                      end={item.end}
                       className={({ isActive }) =>
                         `flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
                           isActive

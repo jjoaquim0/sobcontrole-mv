@@ -1,0 +1,12 @@
+DROP INDEX IF EXISTS public.people_audit_events_team_fk_idx;
+DROP INDEX IF EXISTS public.sales_goals_updated_by_fk_idx;
+DROP INDEX IF EXISTS public.sales_goals_created_by_fk_idx;
+DROP INDEX IF EXISTS public.sales_goals_team_company_fk_idx;
+DROP INDEX IF EXISTS public.sales_goals_employee_company_fk_idx;
+DROP INDEX IF EXISTS public.commissions_team_company_fk_idx;
+DROP INDEX IF EXISTS public.employees_sales_profile_fk_idx;
+DROP INDEX IF EXISTS public.employees_manager_company_fk_idx;
+DROP INDEX IF EXISTS public.employees_team_company_fk_idx;
+DROP INDEX IF EXISTS public.teams_updated_by_fk_idx;
+DROP INDEX IF EXISTS public.teams_created_by_fk_idx;
+DROP INDEX IF EXISTS public.teams_manager_company_fk_idx;

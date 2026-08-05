@@ -30,6 +30,19 @@ export type CustomerType = 'individual' | 'corporate'; // pf ou pj
 
 export type CommonStatus = 'active' | 'inactive';
 
+export type EmployeeStatus = 'active' | 'on_leave' | 'terminated';
+
+export type EmploymentType = 'clt' | 'pj' | 'internship' | 'temporary' | 'self_employed' | 'other';
+
+export type CommissionStatus = 'pending' | 'approved' | 'paid' | 'canceled';
+
+export type TeamStatus = 'active' | 'inactive';
+export type SalesGoalType = 'sales_value' | 'sales_count' | 'new_customers' | 'custom';
+export type SalesGoalAssignment = 'employee' | 'team';
+export type SalesGoalPeriod = 'monthly' | 'quarterly' | 'annual' | 'custom';
+export type SalesGoalStatus = 'active' | 'completed' | 'expired' | 'canceled';
+export type SalesGoalResultSource = 'automatic' | 'manual';
+
 export interface Company {
   id: string;
   name: string;
@@ -74,6 +87,121 @@ export interface Profile {
   companyId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Employee {
+  id: string;
+  companyId: string;
+  fullName: string;
+  email?: string;
+  phone?: string;
+  cpfMasked?: string;
+  birthDate?: string;
+  jobTitle: string;
+  department?: string;
+  teamId?: string;
+  teamName?: string;
+  managerEmployeeId?: string;
+  managerName?: string;
+  salesProfileId?: string;
+  employmentType: EmploymentType;
+  admissionDate?: string;
+  status: EmployeeStatus;
+  internalNotes?: string;
+  commissionEnabled: boolean;
+  commissionRuleNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Commission {
+  id: string;
+  companyId: string;
+  employeeId: string;
+  employeeName: string;
+  teamId?: string;
+  teamName?: string;
+  description: string;
+  referencePeriod?: string;
+  grossAmount: number;
+  status: CommissionStatus;
+  internalNotes?: string;
+  paidAt?: string;
+  canceledAt?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PeopleAuditEvent {
+  id: string;
+  companyId: string;
+  employeeId?: string;
+  teamId?: string;
+  entityType: 'employee' | 'team' | 'goal' | 'commission';
+  entityId: string;
+  eventType: string;
+  changedFields: string[];
+  actorId?: string;
+  actorName?: string;
+  createdAt: string;
+}
+
+export interface Team {
+  id: string;
+  companyId: string;
+  name: string;
+  description?: string;
+  managerEmployeeId?: string;
+  managerName?: string;
+  status: TeamStatus;
+  activeMembers: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalesGoal {
+  id: string;
+  companyId: string;
+  name: string;
+  goalType: SalesGoalType;
+  assignmentType: SalesGoalAssignment;
+  employeeId?: string;
+  employeeName?: string;
+  teamId?: string;
+  teamName?: string;
+  periodType: SalesGoalPeriod;
+  targetValue: number;
+  startDate: string;
+  endDate: string;
+  status: SalesGoalStatus;
+  effectiveStatus: SalesGoalStatus;
+  notes?: string;
+  resultSource: SalesGoalResultSource;
+  hasAutomaticSource: boolean;
+  manualResult: number;
+  currentResult: number;
+  progressPercent: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamPerformance {
+  team: Team;
+  goalTarget: number;
+  goalResult: number;
+  progressPercent: number;
+  goalsAtRisk: number;
+  goalsCompleted: number;
+  salesTotal?: number;
+  hasSalesSource: boolean;
+}
+
+export interface SalesProfileOption {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export interface Customer {

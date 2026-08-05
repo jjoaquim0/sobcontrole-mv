@@ -73,6 +73,31 @@ describe('Sidebar reports accordion', () => {
   });
 });
 
+describe('Sidebar people accordion', () => {
+  beforeEach(() => {
+    mocks.role = 'admin';
+  });
+
+  it('exibe Funcionários, Comissões e Pagamentos com badge Em breve', () => {
+    renderSidebar();
+    const trigger = screen.getByRole('button', { name: 'Pessoas' });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(trigger);
+    expect(screen.getByRole('link', { name: 'Funcionários' })).toHaveAttribute('href', '/pessoas/funcionarios');
+    expect(screen.getByRole('link', { name: 'Comissões' })).toHaveAttribute('href', '/pessoas/comissoes');
+    expect(screen.getByRole('link', { name: /Pagamentos.*Em breve/ })).toHaveAttribute('href', '/pessoas/pagamentos');
+  });
+
+  it('abre na rota de Pessoas e fica oculto para employee', () => {
+    const { unmount } = renderSidebar('/pessoas/comissoes');
+    expect(screen.getByRole('button', { name: 'Pessoas' })).toHaveAttribute('aria-expanded', 'true');
+    unmount();
+    mocks.role = 'employee';
+    renderSidebar();
+    expect(screen.queryByRole('button', { name: 'Pessoas' })).not.toBeInTheDocument();
+  });
+});
+
 describe('Sidebar surface', () => {
   it('exibe a Gestly como navegação principal e destaca a rota ativa', () => {
     renderSidebar('/gestly');

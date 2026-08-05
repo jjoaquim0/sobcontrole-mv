@@ -22,6 +22,7 @@ import { Customers, CustomerDetailPage } from '../pages/customers';
 import { Suppliers, SupplierDetailPage } from '../pages/suppliers';
 import { Purchases, PurchaseDetailPage } from '../pages/purchases';
 import { Financial } from '../pages/financial';
+import { CommissionsPage, EmployeeDetailPage, EmployeesPage, PaymentsComingSoonPage, SalesGoalsPage, TeamDetailPage, TeamsPage } from '../pages/people';
 import { Tax, TaxSetupPage, TaxClassificationPage } from '../pages/tax';
 import {
   ReportsCustomPage,
@@ -156,6 +157,62 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={['admin', 'manager']}>
             <Financial />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/funcionarios',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <EmployeesPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/funcionarios/:id',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <EmployeeDetailPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/comissoes',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <CommissionsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/equipes',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <TeamsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/equipes/:id',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <TeamDetailPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/metas',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <SalesGoalsPage />
+          </RoleRoute>
+        ),
+      },
+      {
+        path: 'pessoas/pagamentos',
+        element: (
+          <RoleRoute allowedRoles={['admin', 'manager']}>
+            <PaymentsComingSoonPage />
           </RoleRoute>
         ),
       },

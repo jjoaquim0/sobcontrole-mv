@@ -1,0 +1,18 @@
+DROP FUNCTION IF EXISTS public.remove_commission(UUID);
+DROP FUNCTION IF EXISTS public.set_commission_status(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.save_commission(UUID, UUID, TEXT, DATE, NUMERIC, TEXT);
+DROP FUNCTION IF EXISTS public.set_employee_status(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.save_employee(UUID, TEXT, TEXT, TEXT, TEXT, BOOLEAN, DATE, TEXT, TEXT, TEXT, DATE, TEXT, TEXT, BOOLEAN, TEXT);
+DROP TRIGGER IF EXISTS commissions_write_audit_event ON public.commissions;
+DROP TRIGGER IF EXISTS employees_write_audit_event ON public.employees;
+DROP FUNCTION IF EXISTS public.people_write_audit_event();
+DROP TRIGGER IF EXISTS commissions_touch_updated_at ON public.commissions;
+DROP TRIGGER IF EXISTS employee_sensitive_touch_updated_at ON public.employee_sensitive_data;
+DROP TRIGGER IF EXISTS employees_touch_updated_at ON public.employees;
+DROP FUNCTION IF EXISTS public.people_touch_updated_at();
+DROP FUNCTION IF EXISTS public.people_assert_manager();
+DROP FUNCTION IF EXISTS public.is_valid_cpf(TEXT);
+DROP TABLE IF EXISTS public.people_audit_events;
+DROP TABLE IF EXISTS public.commissions;
+DROP TABLE IF EXISTS public.employee_sensitive_data;
+DROP TABLE IF EXISTS public.employees;

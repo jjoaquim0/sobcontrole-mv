@@ -28,7 +28,13 @@ import {
   ChevronDown,
   Clock3,
   Lock,
-  Sparkles
+  Sparkles,
+  ContactRound,
+  UserRound,
+  CircleDollarSign,
+  WalletCards,
+  Building,
+  Target,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -41,9 +47,18 @@ interface MenuItem {
   path: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: UserRole[];
-  children?: readonly ReportNavigationItem[];
+  children?: readonly SidebarChildItem[];
   /** Casa apenas a rota exata. Necessário quando o path é prefixo de sub-rotas. */
   end?: boolean;
+}
+
+interface SidebarChildItem {
+  name: string;
+  path: string;
+  icon: React.ComponentType<{ className?: string }>;
+  moduleKey?: ReportNavigationItem['moduleKey'];
+  defaultAccessStatus?: ReportNavigationItem['defaultAccessStatus'];
+  badge?: string;
 }
 
 interface MenuSection {
@@ -57,11 +72,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
   const canViewReports = hasRole(['admin', 'manager']);
   const { modules: analyticsModules, isLoading: isLoadingAnalyticsModules } = useAnalyticsModules(canViewReports);
   const isReportsRoute = location.pathname.startsWith('/relatorios') || location.pathname.startsWith('/reports');
+  const isPeopleRoute = location.pathname.startsWith('/pessoas');
   const [isReportsOpen, setIsReportsOpen] = useState(isReportsRoute);
+  const [isPeopleOpen, setIsPeopleOpen] = useState(isPeopleRoute);
 
   useEffect(() => {
     if (isReportsRoute) setIsReportsOpen(true);
   }, [isReportsRoute]);
+
+  useEffect(() => {
+    if (isPeopleRoute) setIsPeopleOpen(true);
+  }, [isPeopleRoute]);
 
   const menuSections: MenuSection[] = [
     {
@@ -88,6 +109,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Gestão',
       items: [
         { name: 'Financeiro', path: '/financial', icon: CreditCard, roles: ['admin', 'manager'] },
+        {
+          name: 'Pessoas',
+          path: '/pessoas',
+          icon: ContactRound,
+          roles: ['admin', 'manager'],
+          children: [
+            { name: 'Funcionários', path: '/pessoas/funcionarios', icon: UserRound },
+            { name: 'Equipes', path: '/pessoas/equipes', icon: Building },
+            { name: 'Metas de vendas', path: '/pessoas/metas', icon: Target },
+            { name: 'Comissões', path: '/pessoas/comissoes', icon: CircleDollarSign },
+            { name: 'Pagamentos', path: '/pessoas/pagamentos', icon: WalletCards, badge: 'Em breve' },
+          ],
+        },
         { name: 'Relatórios', path: '/relatorios', icon: ReportsMenuIcon, roles: ['admin', 'manager'], children: REPORT_NAVIGATION_ITEMS },
         { name: 'Documentos', path: '/documents', icon: FileText },
       ],
@@ -169,42 +203,52 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               <div className="space-y-1">
                 {visibleItems.map((item) => {
                   if (item.children) {
+                    const isPeopleMenu = item.path === '/pessoas';
+                    const isMenuOpen = isPeopleMenu ? isPeopleOpen : isReportsOpen;
+                    const isMenuRoute = isPeopleMenu ? isPeopleRoute : isReportsRoute;
+                    const submenuId = isPeopleMenu ? 'people-sidebar-submenu' : 'reports-sidebar-submenu';
                     return (
                       <div key={item.path}>
                         <button
                           type="button"
-                          aria-expanded={isReportsOpen}
-                          aria-controls="reports-sidebar-submenu"
+                          aria-expanded={isMenuOpen}
+                          aria-controls={submenuId}
                           onClick={() => {
                             if (isCollapsed) {
                               onToggle();
-                              setIsReportsOpen(true);
+                              if (isPeopleMenu) setIsPeopleOpen(true);
+                              else setIsReportsOpen(true);
                               return;
                             }
-                            setIsReportsOpen((current) => !current);
+                            if (isPeopleMenu) setIsPeopleOpen((current) => !current);
+                            else setIsReportsOpen((current) => !current);
                           }}
                           className={`w-full flex items-center gap-3 px-3 py-2 text-sm font-medium transition-all-custom group rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#00a8d8] ${
-                            isReportsRoute
+                            isMenuRoute
                               ? 'bg-gradient-to-r from-[#0B2551] to-[#00a8d8] text-white shadow-md shadow-[#00d2ff]/10'
                               : 'hover:bg-black/[0.03] dark:hover:bg-white/5 text-gray-600 dark:text-white/70 hover:text-gray-900 dark:hover:text-white'
                           }`}
                         >
-                          <item.icon className={`w-5 h-5 shrink-0 ${isReportsRoute ? 'text-white' : 'text-gray-400 dark:text-white/60 group-hover:text-gray-900 dark:group-hover:text-white'}`} />
+                          <item.icon className={`w-5 h-5 shrink-0 ${isMenuRoute ? 'text-white' : 'text-gray-400 dark:text-white/60 group-hover:text-gray-900 dark:group-hover:text-white'}`} />
                           {!isCollapsed && (
                             <>
                               <span className="flex-1 text-left">{item.name}</span>
-                              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isReportsOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isMenuOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                             </>
                           )}
                         </button>
 
-                        {!isCollapsed && isReportsOpen && (
-                          <div id="reports-sidebar-submenu" className="ml-5 mt-1 pl-3 border-l border-gray-200 dark:border-white/10 space-y-1">
+                        {!isCollapsed && isMenuOpen && (
+                          <div id={submenuId} className="ml-5 mt-1 pl-3 border-l border-gray-200 dark:border-white/10 space-y-1">
                             {item.children.map((child) => {
-                              const module = analyticsModules.find((candidate) => candidate.key === child.moduleKey);
-                              const accessStatus = module?.accessStatus || child.defaultAccessStatus || (isLoadingAnalyticsModules ? undefined : 'locked');
+                              const module = child.moduleKey
+                                ? analyticsModules.find((candidate) => candidate.key === child.moduleKey)
+                                : undefined;
+                              const accessStatus = child.moduleKey
+                                ? module?.accessStatus || child.defaultAccessStatus || (isLoadingAnalyticsModules ? undefined : 'locked')
+                                : undefined;
                               const isLocked = accessStatus === 'locked';
-                              const isComingSoon = accessStatus === 'coming_soon';
+                              const isComingSoon = accessStatus === 'coming_soon' || Boolean(child.badge);
 
                               return (
                                 <NavLink
@@ -221,7 +265,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
                                   <child.icon className="w-4 h-4 shrink-0 opacity-80" aria-hidden="true" />
                                   <span className="flex-1 text-left leading-tight">{child.name}</span>
                                   {isLocked && <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" aria-label="Módulo bloqueado" />}
-                                  {isComingSoon && <Clock3 className="w-3.5 h-3.5 text-blue-400 shrink-0" aria-label="Em breve" />}
+                                  {child.badge ? (
+                                    <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">{child.badge}</span>
+                                  ) : isComingSoon ? (
+                                    <Clock3 className="w-3.5 h-3.5 text-blue-400 shrink-0" aria-label="Em breve" />
+                                  ) : null}
                                 </NavLink>
                               );
                             })}

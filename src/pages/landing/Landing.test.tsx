@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Landing } from './index';
@@ -91,5 +91,35 @@ describe('Landing — tema claro', () => {
     fireEvent.click(second);
     expect(second).toHaveAttribute('aria-expanded', 'true');
     expect(first).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('apresenta a gestão inteligente depois dos módulos e sinaliza o insight futuro', () => {
+    renderLanding();
+
+    const modulesHeading = screen.getByRole('heading', {
+      name: /Conheça o SobControle por dentro/i,
+    });
+    const intelligenceHeading = screen.getByRole('heading', {
+      name: 'Pare de perder dinheiro por falta de visão da sua empresa.',
+    });
+    const modulesSection = modulesHeading.closest('section');
+    const intelligenceSection = intelligenceHeading.closest('section');
+
+    expect(modulesSection).not.toBeNull();
+    expect(intelligenceSection).toHaveAttribute('id', 'gestly');
+    expect(
+      modulesSection!.compareDocumentPosition(intelligenceSection!) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      screen.getByText('O SobControle organiza a empresa. O Gestly ajuda a empresa a agir.')
+    ).toBeInTheDocument();
+
+    const futureInsight = screen
+      .getByText('Sua receita do período está abaixo da meta definida.')
+      .closest('li');
+
+    expect(futureInsight).not.toBeNull();
+    expect(within(futureInsight!).getByText('Visão futura')).toBeInTheDocument();
   });
 });

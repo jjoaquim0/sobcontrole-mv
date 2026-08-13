@@ -6,6 +6,7 @@ export const SETTINGS_TAB_IDS: SettingsTabId[] = [
   'notifications',
   'security',
   'integrations',
+  'email-sending',
   'team',
   'subscription',
   'data',

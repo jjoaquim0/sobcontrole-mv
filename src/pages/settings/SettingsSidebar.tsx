@@ -8,6 +8,7 @@ import {
   Users,
   Sparkles,
   Database,
+  Mail,
   LucideIcon,
 } from 'lucide-react';
 
@@ -17,6 +18,7 @@ export type SettingsTabId =
   | 'notifications'
   | 'security'
   | 'integrations'
+  | 'email-sending'
   | 'team'
   | 'subscription'
   | 'data';
@@ -34,6 +36,7 @@ const TABS: TabDefinition[] = [
   { id: 'notifications', label: 'Notificações', description: 'Alertas e avisos', icon: Bell },
   { id: 'security', label: 'Segurança', description: 'Senha e acessos', icon: Shield },
   { id: 'integrations', label: 'Integrações', description: 'Chaves de API', icon: Puzzle },
+  { id: 'email-sending', label: 'Envio de e-mails', description: 'Remetentes e histórico', icon: Mail },
   { id: 'team', label: 'Equipe', description: 'Membros e permissões', icon: Users },
   { id: 'subscription', label: 'Assinatura', description: 'Plano e cobrança', icon: Sparkles },
   { id: 'data', label: 'Dados', description: 'Exportar e limpar', icon: Database },

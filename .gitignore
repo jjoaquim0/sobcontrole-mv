@@ -63,3 +63,7 @@ dist-edge/
 # (management token da Supabase) e NUNCA devem ser versionados
 run_schema.mjs
 test_mgmt.mjs
+
+# Maestri: runtime local de roles/agentes (prompts e settings por sessão),
+# não pertence ao histórico do projeto
+.maestri/

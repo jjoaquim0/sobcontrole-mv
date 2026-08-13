@@ -1,0 +1,83 @@
+schema: 1
+story: '1.34'
+story_title: 'E-mail transacional multiempresa'
+gate: CONCERNS
+status_reason: 'A migration e as Edge Functions estão ativas, e as provas remotas de RLS cross-tenant e reserva idempotente passaram. Não há HIGH funcional conhecido. O PASS permanece retido porque o envio externo não pôde ser exercitado sem credenciais Resend, a deduplicação nativa de Gmail/Graph não está demonstrada e os gates globais legados seguem vermelhos.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-08-05T20:40:00-03:00'
+expires: '2026-08-19T20:40:00-03:00'
+quality_score: 70
+
+top_issues:
+  - id: ENV-001
+    severity: medium
+    category: reliability
+    title: 'Envio externo não foi validado porque RESEND_API_KEY e RESEND_FROM_EMAIL não estão configurados'
+    refs:
+      - 'supabase/functions/email-sender-api/index.ts:151'
+      - '.env.example:1'
+    suggested_owner: devops
+  - id: IDEM-002
+    severity: medium
+    category: reliability
+    title: 'Deduplicação provider-side de Gmail e Microsoft não está demonstrada além de metadados determinísticos'
+    refs:
+      - 'supabase/functions/_shared/email/providers/google.ts:10'
+      - 'supabase/functions/_shared/email/providers/microsoft.ts:17'
+    suggested_owner: dev
+  - id: CI-001
+    severity: medium
+    category: compliance
+    title: 'Lint/typecheck globais continuam falhando no baseline legado'
+    refs:
+      - 'docs/qa/coderabbit-reports/1.34-uncommitted.md:6'
+      - '.ai/decision-log-1.34.md:39'
+    suggested_owner: devops
+
+waiver:
+  active: false
+
+evidence:
+  tests_reviewed: 455
+  focused_tests: '18/18 PASS'
+  full_suite: '455/455 PASS (previous verified evidence)'
+  focused_lint: PASS
+  global_lint: 'FAIL — legacy baseline outside Story 1.34'
+  typecheck: 'FAIL — legacy baseline outside Story 1.34; no story errors'
+  build: PASS
+  edge_functions: '3/3 ACTIVE in project qxcchymwswontqcwqogm'
+  migration: 'PASS — remote version 20260805232055 applied'
+  rls_runtime: 'PASS — one own-tenant row visible, zero cross-tenant rows, transaction rolled back'
+  idempotency_runtime: 'PASS — first duplicate=false, second duplicate=true with same log_id, transaction rolled back'
+  privileged_objects: 'PASS — private tables and SECURITY DEFINER RPC grants verified'
+  authenticated_ui: 'PASS — UI invoked Edge Function and loaded settings'
+  hmac_secret: 'PASS — EMAIL_RECIPIENT_HMAC_SECRET configured'
+  external_delivery: 'NOT_RUN — missing RESEND_API_KEY/RESEND_FROM_EMAIL; provider account requires login'
+  risks_identified: 3
+  trace:
+    ac_covered: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 20]
+    ac_gaps: [10, 19]
+
+nfr_validation:
+  security:
+    status: PASS
+    notes: 'RLS cross-tenant passou em transação real; tabelas privadas, grants e RPCs SECURITY DEFINER foram verificados. Testes comportamentais cobrem papéis, tenant guard, OAuth/PKCE/nonce e webhook.'
+  performance:
+    status: CONCERNS
+    notes: 'A reserva idempotente real passou, mas limites sob carga/concorrência sustentada não foram medidos.'
+  reliability:
+    status: CONCERNS
+    notes: 'Webhook e reserva local estão demonstrados; entrega externa Resend não foi executada e a deduplicação nativa Gmail/Graph permanece não comprovada.'
+  maintainability:
+    status: CONCERNS
+    notes: 'Testes focados, lint focado, build e Edge Functions estão verdes; lint/typecheck globais continuam falhando no baseline documentado.'
+
+recommendations:
+  immediate:
+    - action: 'Configurar RESEND_API_KEY e RESEND_FROM_EMAIL por canal seguro e executar um smoke test transacional controlado, confirmando envio, log e webhook.'
+      refs: ['supabase/functions/email-sender-api/index.ts:151']
+    - action: 'Validar com documentação/ambiente dos provedores se Message-ID e client-request-id entregam a garantia exigida ou formalizar que a deduplicação forte é local.'
+      refs: ['supabase/functions/_shared/email/providers/google.ts:10', 'supabase/functions/_shared/email/providers/microsoft.ts:17']
+  future:
+    - action: 'Quitar o baseline global de lint/typecheck e repetir o CodeRabbit quando WSL estiver disponível.'
+      refs: ['docs/qa/coderabbit-reports/1.34-uncommitted.md:6']

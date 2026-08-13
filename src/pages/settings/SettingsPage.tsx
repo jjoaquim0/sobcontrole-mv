@@ -9,6 +9,7 @@ import { AppearanceTab } from './tabs/AppearanceTab';
 import { NotificationsTab } from './tabs/NotificationsTab';
 import { SecurityTab } from './tabs/SecurityTab';
 import { IntegrationsTab } from './tabs/IntegrationsTab';
+import { EmailSendingTab } from './tabs/EmailSendingTab';
 import { TeamTab } from './tabs/TeamTab';
 import { SubscriptionTab } from './tabs/SubscriptionTab';
 import { DataTab } from './tabs/DataTab';
@@ -25,6 +26,8 @@ const renderTab = (tab: SettingsTabId): React.ReactNode => {
       return <SecurityTab />;
     case 'integrations':
       return <IntegrationsTab />;
+    case 'email-sending':
+      return <EmailSendingTab />;
     case 'team':
       return <TeamTab />;
     case 'subscription':

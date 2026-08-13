@@ -71,6 +71,105 @@ export const getPipelineStages = async (): Promise<PipelineStage[]> => {
   return (data || []).map(mapDbStage);
 };
 
+export const getArchivedPipelineStages = async (): Promise<PipelineStage[]> => {
+  const companyId = requireCompanyId();
+
+  const { data, error } = await supabase
+    .from('pipeline_stages')
+    .select('*')
+    .eq('company_id', companyId)
+    .eq('is_active', false)
+    .order('position', { ascending: true });
+
+  if (error) throw error;
+  return (data || []).map(mapDbStage);
+};
+
+export interface CreatePipelineStageInput {
+  name: string;
+  color: string;
+}
+
+export const createPipelineStage = async (input: CreatePipelineStageInput): Promise<PipelineStage> => {
+  const companyId = requireCompanyId();
+
+  // Posição = max(position) das etapas ativas + 1 (0 quando não houver
+  // nenhuma), lida via getPipelineStages() para reaproveitar a mesma
+  // listagem/ordenação já usada pelo kanban, em vez de duplicar a query.
+  const activeStages = await getPipelineStages();
+  const nextPosition = Math.max(...activeStages.map((s) => s.position), -1) + 1;
+
+  const { data: created, error } = await supabase
+    .from('pipeline_stages')
+    .insert({
+      id: crypto.randomUUID(),
+      company_id: companyId,
+      name: input.name,
+      color: input.color,
+      position: nextPosition,
+      is_active: true,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapDbStage(created);
+};
+
+export interface UpdatePipelineStageInput {
+  name?: string;
+  color?: string;
+}
+
+export const updatePipelineStage = async (id: string, patch: UpdatePipelineStageInput): Promise<PipelineStage> => {
+  const companyId = requireCompanyId();
+
+  const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (patch.name !== undefined) payload.name = patch.name;
+  if (patch.color !== undefined) payload.color = patch.color;
+
+  const { data: updated, error } = await supabase
+    .from('pipeline_stages')
+    .update(payload)
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapDbStage(updated);
+};
+
+export const archivePipelineStage = async (id: string): Promise<PipelineStage> => {
+  const companyId = requireCompanyId();
+
+  const { data: updated, error } = await supabase
+    .from('pipeline_stages')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapDbStage(updated);
+};
+
+export const restorePipelineStage = async (id: string): Promise<PipelineStage> => {
+  const companyId = requireCompanyId();
+
+  const { data: updated, error } = await supabase
+    .from('pipeline_stages')
+    .update({ is_active: true, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('company_id', companyId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapDbStage(updated);
+};
+
 export interface DealFilters {
   search?: string;
   ownerId?: string;
@@ -180,18 +279,20 @@ export interface UpdateDealInput {
   value?: number;
   expectedCloseDate?: string | null;
   notes?: string;
+  stageId?: string;
 }
 
 export const updateDeal = async (id: string, data: UpdateDealInput): Promise<Deal> => {
   const companyId = requireCompanyId();
+  const { stageId, ...fields } = data;
 
   const payload: Record<string, unknown> = { updated_at: new Date().toISOString() };
-  if (data.title !== undefined) payload.title = data.title;
-  if (data.customerId !== undefined) payload.customer_id = data.customerId;
-  if (data.ownerId !== undefined) payload.owner_id = data.ownerId;
-  if (data.value !== undefined) payload.value = data.value;
-  if (data.expectedCloseDate !== undefined) payload.expected_close_date = data.expectedCloseDate || null;
-  if (data.notes !== undefined) payload.notes = data.notes;
+  if (fields.title !== undefined) payload.title = fields.title;
+  if (fields.customerId !== undefined) payload.customer_id = fields.customerId;
+  if (fields.ownerId !== undefined) payload.owner_id = fields.ownerId;
+  if (fields.value !== undefined) payload.value = fields.value;
+  if (fields.expectedCloseDate !== undefined) payload.expected_close_date = fields.expectedCloseDate || null;
+  if (fields.notes !== undefined) payload.notes = fields.notes;
 
   const { data: updated, error } = await supabase
     .from('deals')
@@ -202,6 +303,30 @@ export const updateDeal = async (id: string, data: UpdateDealInput): Promise<Dea
     .single();
 
   if (error) throw error;
+
+  // stage_id nunca é gravado no UPDATE acima: quando fornecido e diferente
+  // da etapa atual, a troca é encaminhada para moveDealStage() - o único
+  // caminho de escrita de stage_id do módulo (posição + deal_stage_history).
+  // Isso consolida num único caminho a mudança de etapa feita pelo
+  // DealModal, eliminando o workaround que antes chamava moveDeal
+  // separadamente a partir de PipelinePage (Story 1.35, FR-8). Não toca em
+  // status/closed_at/lost_reason - isso é decisão de FR-7 (Story 1.37).
+  if (stageId !== undefined && stageId !== updated.stage_id) {
+    const { data: existing, error: posErr } = await supabase
+      .from('deals')
+      .select('position')
+      .eq('company_id', companyId)
+      .eq('stage_id', stageId)
+      .eq('status', 'open')
+      .order('position', { ascending: false })
+      .limit(1);
+
+    if (posErr) throw posErr;
+    const nextPosition = existing && existing.length > 0 ? Number(existing[0].position) + 1 : 0;
+
+    return moveDealStage(id, stageId, nextPosition);
+  }
+
   return mapDbDeal(updated);
 };
 

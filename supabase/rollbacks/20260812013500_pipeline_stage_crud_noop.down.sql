@@ -1,0 +1,10 @@
+-- Rollback da Story 1.35 — CRUD de etapas do pipeline e correção do bug stage_id
+--
+-- NO-OP: a migration correspondente (20260812013500_pipeline_stage_crud_noop.sql)
+-- não contém DDL/DML, portanto não há nada para reverter. pipeline_stages,
+-- deals e deal_stage_history permanecem exatamente como criados pela
+-- migration da Onda 1 (20260705000000_sales_pipeline_module_schema.sql).
+--
+-- Presente apenas para manter o par migration/rollback exigido pelo
+-- processo (NFR-2). A aplicação de qualquer migration/rollback requer
+-- aprovação manual explícita do usuário; o @dev não aplica este arquivo.

@@ -1,0 +1,23 @@
+-- Story 1.35 — CRUD de etapas do pipeline e correção do bug stage_id
+--
+-- Este arquivo é intencionalmente NO-OP (sem DDL/DML). O schema da Onda 1
+-- (migration 20260705000000_sales_pipeline_module_schema.sql) já criou
+-- pipeline_stages com as colunas necessárias para o CRUD desta story:
+--   - name          (nome da etapa, editável)
+--   - color         (cor da etapa, editável via paleta predefinida)
+--   - is_active     (arquivar = UPDATE is_active = false; reativar = true)
+--   - position      (DOUBLE PRECISION, estratégia de ponto médio já em uso)
+-- e a RLS/policy "Acesso total dos membros da empresa às etapas do
+-- pipeline" (company_id = get_user_company_id()) já cobre as novas
+-- operações de service (getPipelineStages, getArchivedPipelineStages,
+-- createPipelineStage, updatePipelineStage, archivePipelineStage,
+-- restorePipelineStage).
+--
+-- A correção de FR-8 (updateDeal() passando a persistir stage_id pelo
+-- caminho de moveDealStage) também não exige alteração de schema: deals já
+-- possui stage_id, position e a FK para deal_stage_history usada pelo
+-- histórico de movimentação.
+--
+-- Presente apenas para manter o rastro de story -> artefato de migration
+-- exigido pelo processo (NFR-2). A aplicação de qualquer migration requer
+-- aprovação manual explícita do usuário; o @dev não aplica este arquivo.

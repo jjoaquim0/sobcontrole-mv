@@ -13,10 +13,23 @@ const mocks = vi.hoisted(() => ({
   closeDeal: vi.fn(),
   deleteDeal: vi.fn(),
   isDeleting: false,
+  role: 'admin' as string,
 }));
 
 vi.mock('../../hooks/usePipeline', () => ({
   usePipelineStages: () => ({ stages: mocks.stages, isLoading: false, isError: false, refetch: vi.fn() }),
+  useArchivedPipelineStages: () => ({ stages: [], isLoading: false, isError: false, refetch: vi.fn() }),
+  usePipelineStageMutations: () => ({
+    createStage: vi.fn(),
+    isCreatingStage: false,
+    updateStage: vi.fn(),
+    isUpdatingStage: false,
+    archiveStage: vi.fn(),
+    isArchivingStage: false,
+    restoreStage: vi.fn(),
+    isRestoringStage: false,
+  }),
+  useOpenDealCountsByStage: () => ({ counts: {}, isLoading: false }),
   useDeals: () => ({ deals: mocks.deals, isLoading: false, isError: false, refetch: vi.fn() }),
   useDealHistory: () => ({ history: [], isLoading: false }),
   useDealMutations: () => ({
@@ -41,8 +54,8 @@ vi.mock('../../hooks/useCustomers', () => ({
 }));
 
 vi.mock('../../store/authStore', () => ({
-  useAuthStore: (selector: (state: { profile: { id: string } }) => unknown) =>
-    selector({ profile: { id: 'user-1' } }),
+  useAuthStore: (selector: (state: { profile: { id: string; role: string } }) => unknown) =>
+    selector({ profile: { id: 'user-1', role: mocks.role } }),
 }));
 
 vi.mock('../../services/dealsService', () => ({
@@ -138,7 +151,7 @@ describe('PipelinePage — exclusão de oportunidade', () => {
   });
 });
 
-describe('PipelinePage — movimentação automática de etapa', () => {
+describe('PipelinePage — troca de etapa consolidada em updateDeal (Story 1.35, FR-8)', () => {
   beforeEach(() => {
     mocks.deals = [dealAlpha];
     mocks.stages = stages;
@@ -150,7 +163,7 @@ describe('PipelinePage — movimentação automática de etapa', () => {
     mocks.deleteDeal.mockReset();
   });
 
-  it('ao trocar a etapa e salvar, chama updateDeal (sem stageId) e moveDeal com o novo stageId', async () => {
+  it('ao trocar a etapa e salvar, chama updateDeal uma única vez com o stageId no payload', async () => {
     renderPage();
     await openDealDetail();
 
@@ -159,24 +172,33 @@ describe('PipelinePage — movimentação automática de etapa', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }));
 
     await waitFor(() => expect(mocks.updateDeal).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'deal-1', data: expect.objectContaining({ title: 'Negócio Alpha' }) })
+      expect.objectContaining({
+        id: 'deal-1',
+        data: expect.objectContaining({ title: 'Negócio Alpha', stageId: 'stage-2' }),
+      })
     ));
-    expect(mocks.updateDeal.mock.calls[0][0].data).not.toHaveProperty('stageId');
+    expect(mocks.updateDeal).toHaveBeenCalledTimes(1);
 
-    await waitFor(() => expect(mocks.moveDeal).toHaveBeenCalledWith({ id: 'deal-1', toStageId: 'stage-2', position: 0 }));
+    // O workaround antigo (chamada adicional a moveDeal a partir de
+    // PipelinePage) foi removido: a escrita de etapa é responsabilidade
+    // exclusiva de updateDeal()/dealsService, não da página.
+    expect(mocks.moveDeal).not.toHaveBeenCalled();
   });
 
-  it('não chama moveDeal quando a etapa não muda', async () => {
+  it('quando a etapa não muda, updateDeal ainda recebe o stageId atual (sem duplicar chamada)', async () => {
     renderPage();
     await openDealDetail();
 
     fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }));
 
     await waitFor(() => expect(mocks.updateDeal).toHaveBeenCalledTimes(1));
+    expect(mocks.updateDeal).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ stageId: 'stage-1' }) })
+    );
     expect(mocks.moveDeal).not.toHaveBeenCalled();
   });
 
-  it('fecha o modal de detalhes somente após updateDeal e moveDeal resolverem com sucesso', async () => {
+  it('fecha o modal de detalhes somente após updateDeal resolver com sucesso', async () => {
     renderPage();
     await openDealDetail();
 
@@ -184,12 +206,12 @@ describe('PipelinePage — movimentação automática de etapa', () => {
     fireEvent.change(stageSelect, { target: { value: 'stage-2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }));
 
-    await waitFor(() => expect(mocks.moveDeal).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.updateDeal).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Salvar Alterações' })).not.toBeInTheDocument());
   });
 
-  it('mantém o modal de detalhes aberto quando a movimentação de etapa falha', async () => {
-    mocks.moveDeal.mockRejectedValue(new Error('Erro ao mover'));
+  it('mantém o modal de detalhes aberto quando a gravação falha', async () => {
+    mocks.updateDeal.mockRejectedValue(new Error('Erro ao salvar'));
     renderPage();
     await openDealDetail();
 
@@ -197,7 +219,33 @@ describe('PipelinePage — movimentação automática de etapa', () => {
     fireEvent.change(stageSelect, { target: { value: 'stage-2' } });
     fireEvent.click(screen.getByRole('button', { name: 'Salvar Alterações' }));
 
-    await waitFor(() => expect(mocks.moveDeal).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.updateDeal).toHaveBeenCalledTimes(1));
     expect(screen.getByRole('button', { name: 'Salvar Alterações' })).toBeInTheDocument();
+  });
+});
+
+describe('PipelinePage — ponto de entrada do Stage Manager (AC1, AC7)', () => {
+  beforeEach(() => {
+    mocks.deals = [dealAlpha];
+    mocks.stages = stages;
+    mocks.isDeleting = false;
+    mocks.role = 'admin';
+  });
+
+  it('exibe o botão "Etapas" para admin', () => {
+    renderPage();
+    expect(screen.getByRole('button', { name: /Etapas/ })).toBeInTheDocument();
+  });
+
+  it('exibe o botão "Etapas" para manager', () => {
+    mocks.role = 'manager';
+    renderPage();
+    expect(screen.getByRole('button', { name: /Etapas/ })).toBeInTheDocument();
+  });
+
+  it('não exibe o botão "Etapas" para employee', () => {
+    mocks.role = 'employee';
+    renderPage();
+    expect(screen.queryByRole('button', { name: /Etapas/ })).not.toBeInTheDocument();
   });
 });

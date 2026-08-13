@@ -1,6 +1,14 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getPipelineStages,
+  getArchivedPipelineStages,
+  createPipelineStage,
+  updatePipelineStage,
+  archivePipelineStage,
+  restorePipelineStage,
+  CreatePipelineStageInput,
+  UpdatePipelineStageInput,
   getDeals,
   createDeal,
   updateDeal,
@@ -16,7 +24,7 @@ import { toast } from 'sonner';
 
 export const usePipelineStages = () => {
   const stagesQuery = useQuery({
-    queryKey: ['pipeline-stages'],
+    queryKey: ['pipeline-stages', 'active'],
     queryFn: getPipelineStages,
   });
 
@@ -28,10 +36,98 @@ export const usePipelineStages = () => {
   };
 };
 
-export const useDeals = (filters?: DealFilters) => {
+export const useArchivedPipelineStages = (enabled = true) => {
+  const stagesQuery = useQuery({
+    queryKey: ['pipeline-stages', 'archived'],
+    queryFn: getArchivedPipelineStages,
+    enabled,
+  });
+
+  return {
+    stages: stagesQuery.data || [],
+    isLoading: stagesQuery.isLoading,
+    isError: stagesQuery.isError,
+    refetch: stagesQuery.refetch,
+  };
+};
+
+export const usePipelineStageMutations = () => {
+  const queryClient = useQueryClient();
+
+  const invalidateStages = () => {
+    // Prefixo ['pipeline-stages'] invalida tanto ['pipeline-stages','active']
+    // quanto ['pipeline-stages','archived'] de uma vez (match parcial do
+    // React Query). ['deals']/['dashboard'] também são invalidados porque o
+    // nome/cor da etapa aparece nas colunas do kanban e nos cards.
+    queryClient.invalidateQueries({ queryKey: ['pipeline-stages'] });
+    queryClient.invalidateQueries({ queryKey: ['deals'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+  };
+
+  const createMutation = useMutation({
+    mutationFn: (input: CreatePipelineStageInput) => createPipelineStage(input),
+    onSuccess: () => {
+      invalidateStages();
+      toast.success('Etapa criada com sucesso!');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Erro ao criar etapa.');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: UpdatePipelineStageInput }) => updatePipelineStage(id, patch),
+    onSuccess: () => {
+      invalidateStages();
+      toast.success('Etapa atualizada com sucesso!');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Erro ao atualizar etapa.');
+    },
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (id: string) => archivePipelineStage(id),
+    onSuccess: () => {
+      invalidateStages();
+      toast.success('Etapa arquivada.');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Erro ao arquivar etapa.');
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => restorePipelineStage(id),
+    onSuccess: () => {
+      invalidateStages();
+      toast.success('Etapa reativada.');
+    },
+    onError: (err: unknown) => {
+      toast.error(err instanceof Error ? err.message : 'Erro ao reativar etapa.');
+    },
+  });
+
+  return {
+    createStage: createMutation.mutateAsync,
+    isCreatingStage: createMutation.isPending,
+
+    updateStage: updateMutation.mutateAsync,
+    isUpdatingStage: updateMutation.isPending,
+
+    archiveStage: archiveMutation.mutateAsync,
+    isArchivingStage: archiveMutation.isPending,
+
+    restoreStage: restoreMutation.mutateAsync,
+    isRestoringStage: restoreMutation.isPending,
+  };
+};
+
+export const useDeals = (filters?: DealFilters, options?: { enabled?: boolean }) => {
   const dealsQuery = useQuery({
     queryKey: ['deals', filters],
     queryFn: () => getDeals(filters),
+    enabled: options?.enabled ?? true,
   });
 
   return {
@@ -40,6 +136,28 @@ export const useDeals = (filters?: DealFilters) => {
     isError: dealsQuery.isError,
     refetch: dealsQuery.refetch,
   };
+};
+
+// Contagem de negócios abertos por etapa, sem os filtros de busca/responsável/
+// etapa da tela do kanban - usado pelo Stage Manager para exibir "N
+// negócios" por linha e bloquear o arquivamento de etapas com negócios
+// abertos (AC4). `enabled` evita o fetch enquanto o drawer está fechado.
+export const useOpenDealCountsByStage = (enabled: boolean) => {
+  const dealsQuery = useQuery({
+    queryKey: ['deals', undefined],
+    queryFn: () => getDeals(),
+    enabled,
+  });
+
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {};
+    (dealsQuery.data || []).forEach((d) => {
+      map[d.stageId] = (map[d.stageId] || 0) + 1;
+    });
+    return map;
+  }, [dealsQuery.data]);
+
+  return { counts, isLoading: dealsQuery.isLoading };
 };
 
 export const useDealHistory = (dealId?: string) => {

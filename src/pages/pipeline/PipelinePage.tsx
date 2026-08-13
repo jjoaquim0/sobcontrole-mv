@@ -16,11 +16,13 @@ import { ConfirmModal } from '../../components/shared/ConfirmModal';
 import { PipelineColumn } from './components/PipelineColumn';
 import { DealCardOverlay } from './components/DealCard';
 import { DealModal, DealSavePayload } from './components/DealModal';
+import { StageManagerDrawer } from './components/StageManagerDrawer';
 import { usePipelineStages, useDeals, useDealMutations } from '../../hooks/usePipeline';
 import { useSettings } from '../../hooks/useSettings';
+import { useAuthStore } from '../../store/authStore';
 import { isDealOverdue } from '../../services/dealsService';
 import { Deal } from '../../types';
-import { Handshake, DollarSign, TrendingUp, AlertCircle, Search, X, Plus, Loader2 } from 'lucide-react';
+import { Handshake, DollarSign, TrendingUp, AlertCircle, Search, X, Plus, Loader2, Settings2, Layers } from 'lucide-react';
 
 export const PipelinePage: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
@@ -33,6 +35,11 @@ export const PipelinePage: React.FC = () => {
   const [createStageId, setCreateStageId] = useState<string | undefined>(undefined);
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Deal | undefined>(undefined);
+  const [isStageManagerOpen, setIsStageManagerOpen] = useState(false);
+  const [stageManagerAutoCreate, setStageManagerAutoCreate] = useState(false);
+
+  const role = useAuthStore((s) => s.profile?.role);
+  const canManageStages = role === 'admin' || role === 'manager';
 
   useEffect(() => {
     const handler = setTimeout(() => setDebouncedSearch(searchInput), 300);
@@ -92,19 +99,12 @@ export const PipelinePage: React.FC = () => {
 
   const handleSaveDeal = async (data: DealSavePayload) => {
     if (selectedDeal) {
-      const { stageId, ...updateFields } = data;
-      await updateDeal({ id: selectedDeal.id, data: updateFields });
-
-      // O <select> de Etapa já usa o stageId real, mas updateDeal() nunca
-      // gravou stage_id (ver Dev Notes da story 1.9) - por isso a troca de
-      // etapa é feita por uma chamada separada a moveDeal, que reaproveita
-      // 100% da lógica já existente de posição/histórico/rollback do
-      // drag-and-drop, em vez de duplicá-la aqui.
-      if (stageId !== selectedDeal.stageId) {
-        const targetStageDeals = dealsByStage[stageId] || [];
-        const maxPosition = targetStageDeals.reduce((max, d) => Math.max(max, d.position), -1);
-        await moveDeal({ id: selectedDeal.id, toStageId: stageId, position: maxPosition + 1 });
-      }
+      // updateDeal() consolida a escrita de campos básicos e de stage_id num
+      // único caminho (Story 1.35, FR-8): quando a etapa muda, o próprio
+      // serviço encaminha para moveDealStage internamente, preservando
+      // posição e deal_stage_history - sem a chamada adicional a moveDeal
+      // que existia aqui antes.
+      await updateDeal({ id: selectedDeal.id, data });
     } else {
       await createDeal(data);
     }
@@ -190,13 +190,27 @@ export const PipelinePage: React.FC = () => {
         title="Pipeline de Vendas"
         subtitle={`${summary.total} oportunidades ativas no funil`}
         action={
-          <button
-            onClick={() => handleOpenCreate()}
-            className="bg-[#10b981] hover:bg-[#059669] text-white rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200 shadow-md shadow-emerald-500/10"
-          >
-            <Plus className="w-4.5 h-4.5" />
-            Novo Negócio
-          </button>
+          <div className="flex items-center gap-2">
+            {canManageStages && (
+              <button
+                onClick={() => {
+                  setStageManagerAutoCreate(false);
+                  setIsStageManagerOpen(true);
+                }}
+                className="border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-300 rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors duration-200"
+              >
+                <Settings2 className="w-4.5 h-4.5" />
+                Etapas
+              </button>
+            )}
+            <button
+              onClick={() => handleOpenCreate()}
+              className="bg-[#10b981] hover:bg-[#059669] text-white rounded-xl px-4 py-2 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200 shadow-md shadow-emerald-500/10"
+            >
+              <Plus className="w-4.5 h-4.5" />
+              Novo Negócio
+            </button>
+          </div>
         }
       />
 
@@ -308,11 +322,21 @@ export const PipelinePage: React.FC = () => {
         </div>
       ) : stages.length === 0 ? (
         <div className="flex flex-col items-center justify-center bg-white dark:bg-[#1a1d27] border border-gray-100 dark:border-white/5 rounded-2xl p-10 shadow-sm text-center">
-          <Handshake className="w-12 h-12 text-[#10b981] mb-3" />
-          <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-lg mb-1">Nenhuma etapa de pipeline configurada</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm">
-            Sua empresa ainda não possui etapas de funil cadastradas. Entre em contato com o suporte para configurá-las.
+          <Layers className="w-12 h-12 text-[#10b981] mb-3" />
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 text-lg mb-1">Nenhuma etapa ativa</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 max-w-sm mb-5">
+            Sua empresa ainda não possui etapas de funil cadastradas. Crie a primeira etapa para começar a organizar seu pipeline de vendas.
           </p>
+          <button
+            onClick={() => {
+              setStageManagerAutoCreate(true);
+              setIsStageManagerOpen(true);
+            }}
+            className="bg-[#10b981] hover:bg-[#059669] text-white rounded-xl px-4 py-2.5 text-sm font-semibold flex items-center gap-1.5 transition-colors duration-200 shadow-md shadow-emerald-500/10"
+          >
+            <Plus className="w-4.5 h-4.5" />
+            Nova Etapa
+          </button>
         </div>
       ) : (
         <DndContext
@@ -363,6 +387,13 @@ export const PipelinePage: React.FC = () => {
         isLoading={isDeleting}
         confirmText="Excluir oportunidade"
         variant="danger"
+      />
+
+      <StageManagerDrawer
+        isOpen={isStageManagerOpen}
+        onClose={() => setIsStageManagerOpen(false)}
+        canManage={canManageStages}
+        startInCreateFlow={stageManagerAutoCreate}
       />
     </div>
   );

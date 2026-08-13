@@ -28,6 +28,8 @@ vi.mock('../../hooks/usePipeline', () => ({
     isArchivingStage: false,
     restoreStage: vi.fn(),
     isRestoringStage: false,
+    updatePipelineStagePosition: vi.fn(),
+    isUpdatingStagePosition: false,
   }),
   useOpenDealCountsByStage: () => ({ counts: {}, isLoading: false }),
   useDeals: () => ({ deals: mocks.deals, isLoading: false, isError: false, refetch: vi.fn() }),

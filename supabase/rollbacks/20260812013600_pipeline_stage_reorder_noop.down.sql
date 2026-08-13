@@ -1,0 +1,11 @@
+-- Rollback da Story 1.36 — Reordenação de etapas do pipeline por drag-and-drop
+--
+-- NO-OP: a migration correspondente (20260812013600_pipeline_stage_reorder_noop.sql)
+-- não contém DDL/DML, portanto não há nada para reverter. pipeline_stages
+-- permanece exatamente como criada pela migration da Onda 1
+-- (20260705000000_sales_pipeline_module_schema.sql), incluindo
+-- position DOUBLE PRECISION.
+--
+-- Presente apenas para manter o par migration/rollback exigido pelo
+-- processo (NFR-2). A aplicação de qualquer migration/rollback requer
+-- aprovação manual explícita do usuário; o @dev não aplica este arquivo.

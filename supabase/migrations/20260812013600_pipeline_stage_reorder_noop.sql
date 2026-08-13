@@ -1,0 +1,26 @@
+-- Story 1.36 — Reordenação de etapas do pipeline por drag-and-drop (FR-2)
+--
+-- Este arquivo é intencionalmente NO-OP (sem DDL/DML). A reordenação de
+-- etapas usa a mesma coluna já criada pela Onda 1 (migration
+-- 20260705000000_sales_pipeline_module_schema.sql):
+--   - pipeline_stages.position  (DOUBLE PRECISION)
+-- e a mesma estratégia de ponto médio já validada e usada por
+-- moveDealStage()/handleDragEnd() do kanban (PipelinePage.tsx): calcular a
+-- nova posição da etapa arrastada entre suas vizinhas finais
+-- ((previous.position + next.position) / 2, next.position - 1 no início,
+-- previous.position + 1 no fim), sem renumerar a coleção inteira nem trocar
+-- o tipo da coluna.
+--
+-- A RLS/policy "Acesso total dos membros da empresa às etapas do pipeline"
+-- (company_id = get_user_company_id()) já criada na Onda 1 cobre a nova
+-- operação de service updatePipelineStagePosition(stageId, position) —
+-- nenhuma policy nova é necessária porque não há tabela nova nesta story.
+--
+-- Reordenar etapa não escreve em deals, deal_stage_history, status,
+-- closed_at nem lost_reason (sign-off de arquitetura em
+-- docs/architecture/pipeline-vendas-avancado.md, linha ~270): só
+-- pipeline_stages.position muda, e só na linha da etapa arrastada.
+--
+-- Presente apenas para manter o rastro de story -> artefato de migration
+-- exigido pelo processo (NFR-2). A aplicação de qualquer migration requer
+-- aprovação manual explícita do usuário; o @dev não aplica este arquivo.

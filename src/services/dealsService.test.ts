@@ -82,6 +82,7 @@ import {
   updatePipelineStage,
   archivePipelineStage,
   restorePipelineStage,
+  updatePipelineStagePosition,
 } from './dealsService';
 
 const dbStage = (overrides: Partial<Record<string, unknown>> = {}) => ({
@@ -290,6 +291,51 @@ describe('dealsService.updatePipelineStage / archivePipelineStage / restorePipel
 
     expect(archiveQuery.eq).toHaveBeenCalledWith('company_id', 'company-a');
     expect(restoreQuery.eq).toHaveBeenCalledWith('company_id', 'company-a');
+  });
+});
+
+describe('dealsService.updatePipelineStagePosition (Story 1.36, FR-2)', () => {
+  it('atualiza somente position (e updated_at) da etapa arrastada, sem tocar name/color/is_active', async () => {
+    const query = buildQuery({ data: dbStage({ position: 2.5 }), error: null });
+    mocks.from.mockReturnValueOnce(query);
+
+    const updated = await updatePipelineStagePosition('stage-1', 2.5);
+
+    expect(mocks.from).toHaveBeenCalledWith('pipeline_stages');
+    expect(mocks.from).toHaveBeenCalledTimes(1);
+    const payload = query.update.mock.calls[0][0];
+    expect(payload).toEqual(expect.objectContaining({ position: 2.5 }));
+    expect(payload).not.toHaveProperty('name');
+    expect(payload).not.toHaveProperty('color');
+    expect(payload).not.toHaveProperty('is_active');
+    expect(query.eq).toHaveBeenNthCalledWith(1, 'id', 'stage-1');
+    expect(query.eq).toHaveBeenNthCalledWith(2, 'company_id', 'company-1');
+    expect(updated.position).toBe(2.5);
+  });
+
+  it('propaga o erro do Supabase em vez de engolir a falha', async () => {
+    mocks.from.mockReturnValueOnce(buildQuery({ error: { message: 'Falha ao reordenar etapa' } }));
+
+    await expect(updatePipelineStagePosition('stage-1', 1.5)).rejects.toMatchObject({
+      message: 'Falha ao reordenar etapa',
+    });
+  });
+
+  it('teste negativo cross-tenant: reordenar uma etapa de outra empresa permanece escopado pelo company_id da sessão ativa', async () => {
+    // Mesmo cenário de ataque das demais mutations de etapa: o stageId
+    // recebido poderia pertencer à empresa B, mas o service nunca aceita
+    // company_id como parâmetro - vem exclusivamente de
+    // requireCompanyId()/useAuthStore, e a RLS é a autoridade final.
+    mocks.companyId = 'company-a';
+    const query = buildQuery({ error: { message: 'Linha não encontrada (RLS)' } });
+    mocks.from.mockReturnValueOnce(query);
+
+    await expect(updatePipelineStagePosition('stage-of-company-b', 3)).rejects.toMatchObject({
+      message: 'Linha não encontrada (RLS)',
+    });
+
+    expect(query.eq).toHaveBeenCalledWith('company_id', 'company-a');
+    expect(query.eq).not.toHaveBeenCalledWith('company_id', 'company-b');
   });
 });
 

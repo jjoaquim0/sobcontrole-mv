@@ -1,6 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Loader2, Plus, Archive, ArchiveRestore, ChevronDown, ChevronUp, Layers, Lock } from 'lucide-react';
+import {
+  DndContext,
+  DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type Announcements,
+} from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { X, Loader2, Plus, Archive, ArchiveRestore, ChevronDown, ChevronUp, GripVertical, Layers, Lock } from 'lucide-react';
 import { PipelineStage } from '../../../types';
 import {
   usePipelineStages,
@@ -9,6 +21,7 @@ import {
   useOpenDealCountsByStage,
 } from '../../../hooks/usePipeline';
 import { STAGE_COLOR_PALETTE, DEFAULT_NEW_STAGE_COLOR } from './stageColorPalette';
+import { computeStageReorder } from './stageReorder';
 
 export interface StageManagerDrawerProps {
   isOpen: boolean;
@@ -68,6 +81,12 @@ interface StageRowProps {
   onArchive: (id: string) => Promise<void>;
   onRestore: (id: string) => Promise<void>;
   isMutating: boolean;
+  /**
+   * Alça de arraste (Story 1.36, AC1/AC5) - só é passada para etapas ativas
+   * pelo SortableStageRow; etapas arquivadas nunca recebem handle, então a
+   * linha renderiza exatamente como antes da Story 1.36 (sem regressão).
+   */
+  dragHandle?: React.ReactNode;
 }
 
 const StageRow: React.FC<StageRowProps> = ({
@@ -79,6 +98,7 @@ const StageRow: React.FC<StageRowProps> = ({
   onArchive,
   onRestore,
   isMutating,
+  dragHandle,
 }) => {
   const [isEditingName, setIsEditingName] = useState(false);
   const [draftName, setDraftName] = useState(stage.name);
@@ -120,6 +140,7 @@ const StageRow: React.FC<StageRowProps> = ({
 
   return (
     <div className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors duration-150">
+      {dragHandle}
       <div className="relative shrink-0">
         <button
           type="button"
@@ -214,6 +235,54 @@ const StageRow: React.FC<StageRowProps> = ({
   );
 };
 
+interface SortableStageRowProps extends Omit<StageRowProps, 'dragHandle' | 'archived'> {
+  index: number;
+  total: number;
+}
+
+/**
+ * Envolve StageRow com @dnd-kit/sortable para as etapas ativas (Story 1.36).
+ * A alça é um botão focável separado do resto da linha (não a linha
+ * inteira), com aria-label/aria-roledescription descrevendo a posição atual
+ * - assim o clique para renomear/recolorir continua funcionando normalmente
+ * e a interação de arraste fica isolada na alça, como no wireframe do UX
+ * spec (`⠿` antes do dot de cor).
+ */
+const SortableStageRow: React.FC<SortableStageRowProps> = ({ index, total, ...rowProps }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: rowProps.stage.id });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      data-stage-row-index={index}
+      className={isDragging ? 'relative z-10 opacity-60' : 'relative'}
+    >
+      <StageRow
+        {...rowProps}
+        dragHandle={
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            aria-label={`Reordenar etapa ${rowProps.stage.name}, posição ${index + 1} de ${total}`}
+            aria-roledescription="Reordenável"
+            title="Arraste ou use as setas do teclado para reordenar"
+            className="shrink-0 p-1 -ml-1 rounded-lg text-gray-300 hover:text-gray-500 dark:text-white/20 dark:hover:text-white/50 cursor-grab active:cursor-grabbing focus:outline-none focus:ring-2 focus:ring-[#10b981] touch-none"
+          >
+            <GripVertical className="w-4 h-4" />
+          </button>
+        }
+      />
+    </div>
+  );
+};
+
 const StageRowSkeleton: React.FC = () => (
   <div className="flex items-center gap-2.5 px-3 py-2.5 animate-pulse">
     <div className="w-4 h-4 rounded-full bg-gray-200 dark:bg-white/10 shrink-0" />
@@ -288,10 +357,69 @@ export const StageManagerDrawer: React.FC<StageManagerDrawerProps> = ({
     stagesEnabled && isArchivedOpen
   );
   const { counts: dealCounts } = useOpenDealCountsByStage(stagesEnabled);
-  const { createStage, updateStage, archiveStage, restoreStage, isCreatingStage, isUpdatingStage, isArchivingStage, isRestoringStage } =
-    usePipelineStageMutations();
+  const {
+    createStage,
+    updateStage,
+    archiveStage,
+    restoreStage,
+    updatePipelineStagePosition,
+    isCreatingStage,
+    isUpdatingStage,
+    isArchivingStage,
+    isRestoringStage,
+  } = usePipelineStageMutations();
 
   const isMutatingAnyStage = isUpdatingStage || isArchivingStage || isRestoringStage;
+
+  // Ordenação por position ASC usada tanto para renderizar a lista quanto
+  // para os anúncios de acessibilidade (Story 1.36, AC1/AC2/AC5). `stages`
+  // já vem ordenado de usePipelineStages(), mas reordenar aqui de novo é
+  // barato e evita depender de uma garantia implícita do hook.
+  const orderedStages = useMemo(() => [...stages].sort((a, b) => a.position - b.position), [stages]);
+
+  const reorderSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const stageNameById = (id: string) => orderedStages.find((s) => s.id === id)?.name || 'Etapa';
+
+  const reorderAnnouncements: Announcements = {
+    onDragStart({ active }) {
+      const idx = orderedStages.findIndex((s) => s.id === active.id);
+      if (idx === -1) return '';
+      return `${orderedStages[idx].name} selecionado, posição ${idx + 1} de ${orderedStages.length}. Use as setas para mover.`;
+    },
+    onDragOver({ active, over }) {
+      const name = stageNameById(String(active.id));
+      if (!over) return `${name} voltou à posição original.`;
+      const overIdx = orderedStages.findIndex((s) => s.id === over.id);
+      return `${name} está na posição ${overIdx + 1} de ${orderedStages.length}. Pressione espaço para confirmar ou esc para cancelar.`;
+    },
+    onDragEnd({ active, over }) {
+      const name = stageNameById(String(active.id));
+      if (!over) return `${name} não foi movido.`;
+      const overIdx = orderedStages.findIndex((s) => s.id === over.id);
+      return `${name} foi movido para a posição ${overIdx + 1} de ${orderedStages.length}.`;
+    },
+    onDragCancel({ active }) {
+      return `Reordenação de ${stageNameById(String(active.id))} cancelada.`;
+    },
+  };
+
+  const handleStageDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    // Algoritmo determinístico (AC2): ordena por position ASC, remove a
+    // arrastada e recalcula midpoint/borda a partir dos vizinhos finais.
+    // Retorna null em no-op (índice final == original) - nesse caso nenhuma
+    // mutation é chamada, conforme exigido.
+    const result = computeStageReorder(orderedStages, String(active.id), String(over.id));
+    if (!result) return;
+
+    void updatePipelineStagePosition({ stageId: result.stageId, position: result.position });
+  };
 
   useEffect(() => {
     if (!isOpen) {
@@ -420,18 +548,35 @@ export const StageManagerDrawer: React.FC<StageManagerDrawerProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    {stages.map((stage) => (
-                      <StageRow
-                        key={stage.id}
-                        stage={stage}
-                        dealCount={dealCounts[stage.id] || 0}
-                        onRename={handleRename}
-                        onRecolor={handleRecolor}
-                        onArchive={handleArchive}
-                        onRestore={handleRestore}
-                        isMutating={isMutatingAnyStage}
-                      />
-                    ))}
+                    <DndContext
+                      sensors={reorderSensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleStageDragEnd}
+                      accessibility={{
+                        announcements: reorderAnnouncements,
+                        screenReaderInstructions: {
+                          draggable:
+                            'Para pegar uma etapa, pressione a barra de espaço. Enquanto arrasta, use as setas para cima e para baixo para mover a etapa. Pressione espaço novamente para soltar na nova posição, ou esc para cancelar.',
+                        },
+                      }}
+                    >
+                      <SortableContext items={orderedStages.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                        {orderedStages.map((stage, index) => (
+                          <SortableStageRow
+                            key={stage.id}
+                            index={index}
+                            total={orderedStages.length}
+                            stage={stage}
+                            dealCount={dealCounts[stage.id] || 0}
+                            onRename={handleRename}
+                            onRecolor={handleRecolor}
+                            onArchive={handleArchive}
+                            onRestore={handleRestore}
+                            isMutating={isMutatingAnyStage}
+                          />
+                        ))}
+                      </SortableContext>
+                    </DndContext>
 
                     {isCreating && (
                       <NewStageRow onCreate={handleCreate} onCancel={() => setIsCreating(false)} />

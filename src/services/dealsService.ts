@@ -170,6 +170,25 @@ export const restorePipelineStage = async (id: string): Promise<PipelineStage> =
   return mapDbStage(updated);
 };
 
+// Reordenação de etapas (Story 1.36, FR-2): atualiza somente `position` da
+// etapa arrastada, calculada pelo chamador via ponto médio entre vizinhas
+// (ver stageReorder.ts). Não renumera as demais etapas, não recalcula
+// `is_active`/`name`/`color` e preserva `position DOUBLE PRECISION`.
+export const updatePipelineStagePosition = async (stageId: string, position: number): Promise<PipelineStage> => {
+  const companyId = requireCompanyId();
+
+  const { data: updated, error } = await supabase
+    .from('pipeline_stages')
+    .update({ position, updated_at: new Date().toISOString() })
+    .eq('id', stageId)
+    .eq('company_id', companyId)
+    .select('*')
+    .single();
+
+  if (error) throw error;
+  return mapDbStage(updated);
+};
+
 export interface DealFilters {
   search?: string;
   ownerId?: string;

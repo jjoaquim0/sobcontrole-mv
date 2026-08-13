@@ -7,6 +7,7 @@ import {
   updatePipelineStage,
   archivePipelineStage,
   restorePipelineStage,
+  updatePipelineStagePosition,
   CreatePipelineStageInput,
   UpdatePipelineStageInput,
   getDeals,
@@ -19,7 +20,7 @@ import {
   DealFilters,
   UpdateDealInput,
 } from '../services/dealsService';
-import { Deal } from '../types';
+import { Deal, PipelineStage } from '../types';
 import { toast } from 'sonner';
 
 export const usePipelineStages = () => {
@@ -108,6 +109,41 @@ export const usePipelineStageMutations = () => {
     },
   });
 
+  const activeStagesKey = ['pipeline-stages', 'active'];
+
+  // Reordenação (Story 1.36, AC3/AC4): otimista - a ordem escolhida aparece
+  // de imediato tanto no drawer quanto no kanban, porque ambos consomem o
+  // mesmo cache de ['pipeline-stages','active'] via usePipelineStages(). Em
+  // erro, faz rollback do cache para a ordem anterior e emite toast; em
+  // sucesso, invalida somente a query de ativas - a de arquivadas
+  // ('pipeline-stages','archived') não é tocada.
+  const reorderMutation = useMutation({
+    mutationFn: ({ stageId, position }: { stageId: string; position: number }) =>
+      updatePipelineStagePosition(stageId, position),
+    onMutate: async ({ stageId, position }) => {
+      await queryClient.cancelQueries({ queryKey: activeStagesKey });
+      const previous = queryClient.getQueryData<PipelineStage[]>(activeStagesKey);
+
+      if (previous) {
+        const next = previous
+          .map((s) => (s.id === stageId ? { ...s, position } : s))
+          .sort((a, b) => a.position - b.position);
+        queryClient.setQueryData<PipelineStage[]>(activeStagesKey, next);
+      }
+
+      return { previous };
+    },
+    onError: (err: unknown, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(activeStagesKey, context.previous);
+      }
+      toast.error(err instanceof Error ? err.message : 'Erro ao reordenar etapa. A alteração foi revertida.');
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: activeStagesKey });
+    },
+  });
+
   return {
     createStage: createMutation.mutateAsync,
     isCreatingStage: createMutation.isPending,
@@ -120,6 +156,9 @@ export const usePipelineStageMutations = () => {
 
     restoreStage: restoreMutation.mutateAsync,
     isRestoringStage: restoreMutation.isPending,
+
+    updatePipelineStagePosition: reorderMutation.mutateAsync,
+    isUpdatingStagePosition: reorderMutation.isPending,
   };
 };
 

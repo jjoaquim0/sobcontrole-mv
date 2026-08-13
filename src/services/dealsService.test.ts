@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 // Alguns ambientes de teste não expõem crypto.randomUUID por padrão; os
 // services de criação (createDeal/createPipelineStage) dependem dele.
@@ -10,17 +10,39 @@ if (!globalThis.crypto || typeof globalThis.crypto.randomUUID !== 'function') {
 type Resolution = { data?: unknown; error?: unknown };
 
 /**
+ * Tipo explícito do mock, declarado à parte para quebrar a inferência
+ * circular: os métodos abaixo retornam a própria `query` (auto-referência),
+ * então sem uma anotação de tipo o TS não consegue inferir o tipo de
+ * `query`/`buildQuery` sozinho (TS7022/TS7024). `update` anota a tupla de
+ * argumento explicitamente (via generics de `vi.fn`, sem parâmetro nomeado
+ * na implementação) para que `mock.calls[0][0]` enxergue um elemento em vez
+ * de `[]` (TS2493) — os demais métodos não são inspecionados por índice de
+ * argumento nos testes, então mantêm a tupla vazia inferida naturalmente.
+ */
+type QueryBuilderMock = {
+  select: Mock<[], QueryBuilderMock>;
+  insert: Mock<[], QueryBuilderMock>;
+  update: Mock<[payload?: Record<string, unknown>], QueryBuilderMock>;
+  delete: Mock<[], QueryBuilderMock>;
+  eq: Mock<[], QueryBuilderMock>;
+  order: Mock<[], QueryBuilderMock>;
+  limit: Mock<[], QueryBuilderMock>;
+  single: Mock<[], Promise<Resolution>>;
+  then: <T>(onFulfilled?: (value: Resolution) => T, onRejected?: (reason: unknown) => T) => Promise<T>;
+};
+
+/**
  * Query builder genérico que imita a API encadeável do supabase-js
  * (select/insert/update/delete/eq/order/limit/single), sempre retornando a
  * si mesmo até o ponto terminal (.single() ou await direto via .then()).
  * Cada chamada a `supabase.from(...)` no service deve receber uma instância
  * nova, configurada com a resolução esperada para aquela chamada específica.
  */
-const buildQuery = (resolution: Resolution) => {
-  const query = {
+const buildQuery = (resolution: Resolution): QueryBuilderMock => {
+  const query: QueryBuilderMock = {
     select: vi.fn(() => query),
     insert: vi.fn(() => query),
-    update: vi.fn(() => query),
+    update: vi.fn<[payload?: Record<string, unknown>], QueryBuilderMock>(() => query),
     delete: vi.fn(() => query),
     eq: vi.fn(() => query),
     order: vi.fn(() => query),

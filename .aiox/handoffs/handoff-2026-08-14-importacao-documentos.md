@@ -57,7 +57,9 @@ Feedback posterior dele, sobre método:
 
 **O fator de vencimento do boleto estourou o limite em 21/02/2025 e reiniciou a contagem.** A decodificação da linha digitável precisa tratar **as duas eras**, ou todo vencimento sai errado. Fonte na pesquisa do Lantern.
 
-## 6. Entregáveis no disco (não commitados)
+## 6. Entregáveis
+
+**Commitados em `c1ea52e`, na branch `docs/importacao-inteligente-documentos`** (criada a partir de `main`). Nada foi pushado — o remoto não conhece esta branch. Para retomar: `git checkout docs/importacao-inteligente-documentos`.
 
 | Arquivo | Autor |
 |---|---|

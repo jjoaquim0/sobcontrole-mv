@@ -1,7 +1,7 @@
 # Arquitetura P3 — Importação Inteligente de Documentos
 
 **Autor:** @architect (Aria) · **Solicitante:** @aiox-master (Orion) · **Atualizado:** 2026-08-14
-**Status:** proposta. Questões QA-1 a QA-4 resolvidas pelo usuário. Uma decisão de produto pendente (rota de extração de PDF, seção "Extração de PDF").
+**Status:** fechado para implementação da v1. **Nenhuma decisão de produto pendente.** QA-1 a QA-4 e a rota de extração de PDF resolvidas pelo usuário — esta última em 2026-08-14: opção E na v1, opção A (pdf.js no navegador) em onda posterior.
 
 ## Objetivo e limites
 
@@ -147,7 +147,7 @@ Importar apenas nota de entrada (CNPJ do destinatário igual ao da empresa → c
 | Documento | Rota | Entidades de destino | Observação |
 |---|---|---|---|
 | NF-e de entrada (XML) | determinística, sem IA | `suppliers`, `purchases`, `purchase_items`, `account_payables`, `products` | caminho preferencial |
-| DANFE de entrada (PDF) | texto → IA | idem | menor confiança; depende da seção "Extração de PDF" |
+| DANFE de entrada (PDF) | texto → IA | idem | menor confiança; **fora da v1** — onda posterior com pdf.js no navegador (decisão do usuário, 2026-08-14) |
 | NF-e de saída | — | — | **rejeitada com aviso** (QA-4) |
 | Boleto | linha digitável determinística + IA no resíduo | `suppliers`, `account_payables` | exige fornecedor |
 | Contrato | texto → IA | `customers`, `deals` | faltantes coletados na tela (QA-3) |
@@ -173,7 +173,7 @@ Como hoje é agosto de 2026, **boletos das duas eras circulam ao mesmo tempo**. 
 
 Tratar as duas eras é requisito, não detalhe, e merece caso de teste explícito em ambos os lados da virada.
 
-## Extração de PDF — decisão do usuário, não da arquitetura
+## Extração de PDF — decidida pelo usuário em 2026-08-14 (decisão ao fim da seção)
 
 A pesquisa de @analyst (`docs/research/2026-08-13-importacao-documentos-pdf-nfe-deno/README.md`) fecha esta seção com evidência, e a evidência é desfavorável ao desenho original.
 
@@ -209,7 +209,7 @@ Custo financeiro zero, licença MIT, nenhum problema jurídico. Mas não é "gr�
 
 **Opção C — `mupdf.js` com licença comercial Artifex**
 Custo financeiro: licença paga, **preço não público** — a Artifex negocia caso a caso, e não vou estimar valor que não tenho.
-Risco jurídico se usada sem licença: AGPL contamina SaaS fechado. Isto é risco legal, não preferência técnica.
+O fato, sem conclusão jurídica: a AGPL-3.0 impõe ao operador de software disponibilizado pela rede a obrigação de oferecer o código-fonte correspondente a quem o usa, e a Artifex comercializa licença justamente para quem não quer assumir essa obrigação. **Se e como isso se aplica ao Gestly é avaliação de quem tem competência jurídica para dá-la — não de @architect nem de @aiox-master.** A recomendação prática independe da avaliação: não usar `mupdf.js` sem licença comercial.
 **E não resolve o teto de 2s de CPU** — continua parsing WASM. É a única opção que custa dinheiro e mantém o risco principal intacto. Registro por completude, mas ela é dominada pelas demais.
 
 **Opção D — Serviço gerenciado (LlamaParse, Azure, Google)**
@@ -222,11 +222,42 @@ Custo financeiro zero, dívida técnica zero, dívida jurídica zero. Entrega ex
 
 **Variante para boleto, combinável com qualquer opção:** aceitar a linha digitável **colada ou digitada** pelo usuário. Quarenta e sete dígitos, validados por DV, e a partir daí valor e vencimento saem por aritmética. Entrega boleto sem resolver PDF, com custo zero de IA e zero de parsing.
 
-### Recomendação, para o usuário decidir
+### Decisão do usuário — 2026-08-14: **opção E agora, opção A depois**
 
-Se me pedirem preferência: **E agora, A depois.** E destrava o caso de maior valor sem contrair nenhuma das três dívidas — bundle, licença, LGPD. A é a de menor custo total e melhor postura de LGPD, e é reversível. C é dominada. D só se um protótipo provar que a qualidade de tabela da extração local não serve, e essa é uma conclusão que se tira depois de medir, não antes.
+**A escolha é do usuário, registrada em 2026-08-14**, tomada sobre as cinco opções acima com custo e trade-off apresentados. Palavras dele: *"XML agora, PDF no navegador depois."* Coincide com a recomendação desta seção, e ele concordou com ela inteira.
 
-Isso é recomendação, não decisão. **@aiox-master leva as opções ao usuário.**
+| Opção | Situação | Por quê |
+|---|---|---|
+| **E** — só XML + linha digitável | **escolhida para a v1** | entrega funcionamento primeiro, pela rota de maior fidelidade, sem contrair dívida de bundle, licença nem LGPD |
+| **A** — pdf.js no navegador | **escolhida para onda posterior** | menor custo total, melhor postura de LGPD, reversível |
+| **B** — `unpdf` em edge | descartada pela decisão do usuário | grátis *se funcionar*; a única evidência publicada é falha na nossa combinação exata de runtime |
+| **C** — `mupdf.js` licenciado | descartada por dominância | única que custa dinheiro e mantém o teto de 2s intacto |
+| **D** — serviço gerenciado | descartada pela decisão do usuário | transferência internacional sob a LGPD, sem ganho que justifique antes de medir |
+
+B, C e D permanecem registradas acima com a evidência que as sustenta. **Elas não viram lixo por ter havido decisão** — são o registro de por que a decisão é esta, e é o que impede alguém reabrir a discussão do zero daqui a três meses. Reabri-las exige falar com o usuário: não com @architect, não com @aiox-master.
+
+#### D9 — fundamento arquitetural: por que a rota tardia de PDF não bloqueia a v1
+
+*Decisão do usuário acima; este racional é de arquitetura.*
+
+A opção E é a única das cinco que **não decide nada** sobre o que sai da máquina do cliente. Ela não envia PDF a lugar nenhum — é o estado atual do sistema aplicado a um caso de uso novo. Por isso a v1 não depende de nenhuma resposta pendente, e a onda de PDF é **agendada, não bloqueante**.
+
+O que sustenta isso tecnicamente: **o contrato de extração recebe texto e não pergunta quem o produziu** (ver "Contrato de extração"). Trocar o produtor do texto — servidor hoje, navegador na onda de pdf.js — não toca proposta, RPC, tela de revisão nem quota. A onda 5 acopla em uma junta que já existe.
+
+**Alinhamento:** este ADR e a Onda 5 de `docs/epics/epic-importacao-inteligente-documentos.md:70-71` dizem a mesma coisa — pdf.js no navegador, onda posterior.
+
+### Consequência da opção A: o texto passa a ser produzido fora do servidor
+
+A opção A foi escolhida, então o custo que eu listei como trade-off virou **propriedade do desenho**, e precisa estar registrado como tal.
+
+Na v1 (rota XML), o servidor lê o arquivo armazenado e produz ele mesmo o dado estruturado. Na onda de pdf.js, **o servidor recebe texto que ele não produziu e não pode reproduzir a partir do PDF guardado** — não há parser de PDF no servidor, é exatamente essa a premissa da opção A. Duas consequências:
+
+1. **Trilha de auditoria enfraquecida.** Hoje, "de onde veio este campo" tem resposta reproduzível. Na onda 5, a resposta é "de um extrator que rodou no navegador do cliente". A proposta precisa marcar isso: **a origem do texto é atributo da proposta, não detalhe de implementação.**
+2. **R1 (injeção de prompt) muda de superfície, não de gravidade.** O texto passa a ser produzido em ambiente que o servidor não controla — um cliente adulterado pode enviar texto que não corresponde ao PDF. Mas **D2 e D3 continuam segurando**: nada é gravado sem clique humano sobre campo revisável, e a IA nunca teve autoridade de escrita. O atacante ganha a capacidade de propor, que ele já tinha ao escolher o PDF que sobe.
+
+**Proposta, não implementação, para a onda 5** (não muda a onda 1): a proposta carrega `text_origin: 'server' | 'client'`, e a tela de revisão exibe origem `client` como aviso visível — o revisor precisa saber que está conferindo contra um texto que o servidor não pode reconferir. Isso é salvaguarda barata e local; não exige parser no servidor.
+
+**Isto não é consequência nova que o usuário desconhecia ao decidir** — "o servidor perde a capacidade de reconferir o texto contra o arquivo armazenado, o que enfraquece a trilha de auditoria" estava no texto da opção A que lhe foi apresentado. Registro aqui o que ela significa para o desenho, não uma informação que faltou.
 
 ## Contrato de extração
 
@@ -304,10 +335,11 @@ Estes números são **composição de fontes públicas, não medição direta**.
 | R3 | Importação duplicada | D8. Trava única por empresa, verificável offline. |
 | R4 | Custo fora de controle | Cascata, tetos de entrada, quota por feature. |
 | R5 | Vazamento entre empresas | RLS em toda a cadeia; `document_version_id` validado contra a empresa do perfil; NF-e cujo CNPJ não bate é rejeitada. |
-| R6 | **Sem rota viável de PDF→texto** | **Agravado pela evidência.** `unpdf` tem falha relatada na nossa combinação exata; `mupdf` é AGPL; o teto de 2s de CPU não tem benchmark. Endereçado pela seção "Extração de PDF" — decisão do usuário entre cinco opções, e o desenho sobrevive a qualquer uma porque o contrato só recebe texto. |
+| R6 | **Qualidade da extração de PDF→texto** | **Reformulado e rebaixado — decisão minha, declarada.** Deixou de ser "sem rota viável": a rota está decidida (pdf.js no navegador, onda posterior), e ela contorna as três dívidas mapeadas — falha do `unpdf` em edge, licença do `mupdf`, teto de 2s de CPU. O risco residual não é *se há rota*, e sim **se pdf.js reconstrói tabela de DANFE com qualidade suficiente**. Mitigação: a v1 não depende disso (rota XML), e se a onda 5 mostrar que não sustenta, a decisão volta ao usuário sobre as opções já mapeadas — não é decisão de arquitetura. |
 | R7 | **Fadiga de revisão** | **Agravado por QA-2.** Uma nota de trinta itens pode exigir sessenta decisões. Teto de itens, agrupamento por confiança, e default seguro por item. |
 | R8 | Vencimento de boleto errado pela virada do fator | Tratar as duas eras; teste em ambos os lados de 21/02/2025. |
-| R9 | LGPD em serviço externo de parsing | Só se a Opção D for escolhida. Exige base legal e DPA; é passo além do que já se faz com a OpenAI, porque trafega o documento e não a pergunta. |
+| R9 | LGPD em serviço externo de parsing | **Encerrado pela decisão do usuário.** A opção D foi descartada; nenhum documento de cliente trafega para fornecedor novo. Registrado para que a reabertura de D seja deliberada e passe pelo usuário. |
+| R10 | Texto de PDF produzido no navegador, fora do controle do servidor | Só a partir da onda 5 (opção A). D2 e D3 seguram — nada grava sem clique humano. Salvaguarda proposta: `text_origin` na proposta e aviso visível na tela quando for `client`. |
 
 R7 merece ênfase para quem implementar a UI: se a tela empurrar o usuário a aprovar em bloco sem ler, D2 e D3 viram teatro. A tela é controle de segurança, não formulário — e QA-2 acabou de aumentar a carga dela.
 
@@ -331,12 +363,12 @@ Itens não solicitados pelo usuário, separados conforme o Artigo IV:
 2. **Rota XML de NF-e de entrada** — determinística, sem IA, sem dependência da decisão de PDF. Maior valor, menor risco.
 3. **UI de revisão e confirmação**, incluindo decisão de custo por item
 4. **Rota linha digitável de boleto** — determinística; independe da decisão de PDF se a linha for colada pelo usuário
-5. **Rota PDF** — bloqueada pela decisão do usuário na seção "Extração de PDF"
-6. **Quota por feature e auditoria**
-7. **Contrato/proposta comercial**
+5. **Quota por feature e auditoria**
+6. **Contrato/proposta comercial**
+7. **Rota PDF via pdf.js no navegador** — **agendada, não bloqueada.** Fora da v1 por decisão do usuário (2026-08-14); corresponde à Onda 5 do epic. Acopla no contrato de extração sem retrabalho, e carrega a salvaguarda de origem do texto.
 8. **Extrato** — epic próprio, fora desta P3
 
-Os passos 2 e 4 não dependem da decisão pendente de PDF. Isso é deliberado: a maior parte do valor está atrás de rotas determinísticas, e nenhuma delas precisa esperar.
+**Nenhum passo depende de decisão pendente.** Não há decisão de produto em aberto neste ADR. A v1 é executável hoje, e a maior parte do valor está atrás de rotas determinísticas.
 
 ### Restrição de migration (NFR-2)
 

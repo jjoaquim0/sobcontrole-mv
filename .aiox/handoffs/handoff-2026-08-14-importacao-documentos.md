@@ -61,14 +61,23 @@ Feedback posterior dele, sobre método:
 
 **Commitados em `c1ea52e`, na branch `docs/importacao-inteligente-documentos`** (criada a partir de `main`). Nada foi pushado — o remoto não conhece esta branch. Para retomar: `git checkout docs/importacao-inteligente-documentos`.
 
-| Arquivo | Autor |
-|---|---|
-| `docs/architecture/ai-document-ingestion-p3.md` | Aria (@architect) |
-| `docs/research/2026-08-13-importacao-documentos-pdf-nfe-deno/README.md` | Lantern (@analyst) |
-| `docs/ux/importacao-inteligente-documentos-fluxo-ux.md` | Uma (@ux-design-expert) |
-| `docs/agents/brief-template.md` | Quill (@prompt-engineer) |
-| `docs/agents/orchestrator-charter.md` | Orion |
-| `.aiox/briefs/*.md` | Orion (briefs de delegação) |
+| Arquivo | Papel (identificador estável) | Assinatura no documento | Terminal Maestri |
+|---|---|---|---|
+| `docs/architecture/ai-document-ingestion-p3.md` | `@architect` | Aria | Aria (era "Compass") |
+| `docs/research/2026-08-13-importacao-documentos-pdf-nfe-deno/README.md` | `@analyst` | **Atlas** | **Lantern** |
+| `docs/ux/importacao-inteligente-documentos-fluxo-ux.md` | `@ux-design-expert` | Uma / Prism | Prism |
+| `docs/agents/brief-template.md` | `@prompt-engineer` | Quill | Quill |
+| `docs/agents/orchestrator-charter.md` | `@aiox-master` | Orion | Orquestrador Master |
+| `.aiox/briefs/*.md` | `@aiox-master` | Orion | — |
+
+> **Armadilha de rastreabilidade — erro meu, apontado pelo `@architect` em 2026-08-14.**
+> **Nome de terminal ≠ assinatura no documento**, e nenhum dos dois é estável.
+> O `@analyst` atende pelo terminal **Lantern** mas assinou a pesquisa como **Atlas**.
+> O `@architect` assinou o ADR como **Aria**, é chamado de **Compass** dentro da pesquisa
+> e do documento de UX, e o terminal já teve os dois nomes — envio ao nome antigo falha
+> com `Terminal "X" not found`.
+> **Use sempre o papel (`@analyst`, `@architect`) ao citar autoria.** O nome serve só
+> para endereçar o `maestri ask`, e para isso rode `maestri list` antes.
 
 ## 7. Próximo passo exato
 

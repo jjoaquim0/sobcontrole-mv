@@ -121,6 +121,47 @@ Cada bloco de dado extraído carrega um selo claro:
 
 Isso evita o erro mais silencioso do fluxo: vincular a compra a um fornecedor errado por coincidência de nome, sem o usuário perceber que era um vínculo automático.
 
+### 3.6 NF-e — lista de itens em volume médio (5 a 30)
+
+O padrão da §3.4 (lote por exceção) foi desenhado para o extrato, que saiu de escopo — mas o princípio central sobrevive e se aplica aqui: **a maioria dos itens não deveria custar uma decisão nenhuma; só a exceção custa.** A diferença é que aqui a exceção não é um booleano só. Cada item carrega duas perguntas independentes — **vincular a um produto existente ou criar um novo** e, se vinculado, **atualizar ou manter o custo do cadastro** —, e a segunda só existe quando a primeira aponta para um produto que já tem custo cadastrado e esse custo diverge do da nota.
+
+Essa dependência entre as duas perguntas é o que evita a conta de "trinta itens, sessenta cliques" do brief: a decisão de custo não é universal, ela só aparece quando há de fato algo para decidir.
+
+#### 3.6.1 Uma linha, as duas decisões juntas
+
+Cada item é uma linha da tabela de itens (wireframe 8.1b). As duas decisões aparecem lado a lado na mesma linha, nunca em telas ou filtros separados — revisar um item cobre as duas perguntas dele de uma vez, não em duas passagens pela lista. O filtro "Mostrar só os com alerta" é uma **união**: entra na lista filtrada qualquer item que precise de decisão de vínculo **ou** de custo, então a passagem de exceção continua sendo uma só.
+
+#### 3.6.2 Estados da linha
+
+| Estado | Quando acontece | O que a tela mostra | Bloqueia "Gravar"? |
+|---|---|---|---|
+| **Resolvido, sem ação** | Vínculo de alta confiança e custo da nota igual ao do cadastro (ou produto ainda sem custo cadastrado) | Linha display-only, colapsada, ícone ✓ | Não |
+| **Novo produto** | Sem correspondência confiável no cadastro | Chip "🆕 novo produto"; custo inicial = valor da nota — não é decisão, é a única fonte possível na primeira vez | Não |
+| **Vínculo a revisar** | Correspondência de confiança média/baixa, **ou item sem GTIN** (nome/descrição sozinhos nunca bastam para vínculo automático — ver 3.6.3) | Linha expandida: candidato sugerido + "aceitar vínculo" / "buscar outro" / "criar novo mesmo assim" | Sim, até resolvida |
+| **Custo divergente** | Item vinculado a produto existente e custo da nota ≠ custo do cadastro | Linha expandida: custo atual e custo da nota lado a lado, decisão obrigatória "manter" ou "atualizar" — **sem opção pré-marcada** | Sim, até resolvida |
+| **Vínculo a revisar + custo divergente** | As duas condições acima, no mesmo item | Uma única linha expandida com as duas decisões empilhadas — nunca duas linhas | Sim, até as duas resolvidas |
+| **Lista vazia** | IA não extraiu nenhum item da nota (ex.: nota de serviço, ou falha isolada na leitura da tabela de itens) | Cartão: "Não foi possível identificar itens nesta nota. Revise o restante dos dados — produtos podem ser lançados manualmente depois." | Não — itens são aditivos; não travam fornecedor, compra ou contas a pagar |
+
+#### 3.6.3 Default seguro por item, e por quê
+
+- **Vínculo:** confiança alta pré-seleciona "vinculado"; qualquer coisa abaixo disso — incluindo item sem GTIN, onde o casamento só pode se apoiar em nome/descrição — pré-seleciona **"criar novo produto"**. É o lado que erra para não gravar em cima de um registro existente por engano: um produto duplicado é um erro barato e reversível (mescla depois); um vínculo errado silencioso contamina estoque e histórico de custo de um produto que não tem nada a ver com a nota.
+- **Custo, sem divergência:** nada a decidir — "sem alteração" é fato, não escolha.
+- **Custo, com divergência:** **sem default.** Decisão obrigatória por item. Um default fixo — sempre atualizar ou nunca atualizar — resolveria a fadiga às custas do próprio risco que o brief chama de pior resultado possível: em qualquer um dos dois sentidos, algum subconjunto de notas vai deixar o custo do cadastro silenciosamente errado. Custa mais toques; é a conclusão que sustento.
+- **Produto novo:** custo inicial = valor da nota. Não é "default de sobrescrever" — não há o que sobrescrever, é a primeira fonte.
+
+#### 3.6.4 Por que resiste à aprovação sem leitura
+
+Duas coisas, juntas:
+
+1. **A tabela nunca deixa a exceção real invisível.** Diferente do extrato, aqui não existe um "selecionar todos" que varre a decisão de custo, porque essa decisão não tem estado pré-marcado para varrer. Um item com custo divergente só sai do caminho de "Gravar" bloqueado com um toque explícito naquele item.
+2. **Atalho de lote só depois de uma decisão humana real, nunca antes dela.** No pior caso — um fornecedor reajusta o preço de tudo numa entrega, e os trinta itens divergem ao mesmo tempo — a regra "sem default" sozinha viraria trinta decisões idênticas. Resolvo isso sem inventar um default: depois que o usuário decide o **primeiro** item de um grupo de divergências no mesmo sentido (todas para cima, ou todas para baixo), a tela oferece, como sugestão — nunca como pré-marcação — **"Isso também vale para os outros N itens com o mesmo tipo de aumento? [Aplicar aos N] [Não, decidir um a um]"**. A decisão continua sendo do usuário: ele decide uma vez, de forma consciente, e escolhe estender essa decisão; o sistema nunca decide primeiro. Cada linha afetada continua individualmente reabrível antes de "Gravar".
+
+#### 3.6.5 Acima do teto
+
+Sem propor o número: acima do teto, a tela não tenta decompor os itens automaticamente. Fornecedor, compra e contas a pagar continuam sendo criados normalmente — não dependem dos itens. Um aviso declara o corte, no mesmo espírito de honestidade do campo `truncated` já usado para texto truncado na extração: *"Esta nota tem [N] itens, acima do que revisamos automaticamente aqui. Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados ao estoque — lance-os manualmente."* Nenhum produto é criado ou vinculado sem revisão acima do teto; a degradação corta a automação do estoque, nunca a integridade dos outros dados.
+
+**Acessibilidade:** a tabela de itens segue a mesma regra já fechada para a tabela de extrato em §6 — semântica de `<table>` real, não `<div>`s disfarçadas de tabela.
+
 ---
 
 ## 4. Prevenção de erro
@@ -196,14 +237,65 @@ Isso é recomendação de design; a implementação (nome de arquivo, props) é 
 │                                │  │ Data de emissão    ✕ Não identificado   │  │
 │                                │  │ [__/__/____] obrigatório                │  │
 │                                │  └─────────────────────────────────────────┘  │
-│                                │  🆕 3 produtos serão adicionados ao estoque   │
-│                                │  [Ver lista de produtos ▾]                    │
+│                                │  🆕 3 novos · 🔗 12 vinculados · ⚠ 5 revisar  │
+│                                │  [Revisar itens (18) ▸]                       │
 │                                │                                                │
 │                                │  ⚠ Parece semelhante à NF 00123, enviada em   │
 │                                │    03/03. [Ver documento anterior] [Enviar    │
 │                                │    mesmo assim]                               │
 └───────────────────────────────┴───────────────────────────────────────────────┘
                               [Editar todos os campos]        [Ver resumo e gravar →]
+```
+
+Antes, esse bloco escondia a lista inteira atrás de `[Ver lista de produtos ▾]`, sem desenho por trás do colapso. Agora o cartão já mostra a contagem por estado (novo/vinculado/revisar — §3.6.2) antes de qualquer clique, e "Revisar itens" expande para o wireframe 8.1b abaixo, não para uma lista genérica.
+
+### 8.1b Itens expandidos — revisão em volume médio (§3.6)
+
+Ao clicar em "Revisar itens", a tabela ocupa a largura toda (o preview do PDF recolhe para um botão "Ver documento", igual ao comportamento em tela estreita de §3.1), porque uma tabela de 5 a 30 linhas com duas decisões por linha não cabe na metade da tela sem voltar a virar colapso disfarçado.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│ ‹ Voltar aos campos          Itens da nota (18)         [Ver documento original] │
+│ 🆕 3 novos · 🔗 12 vinculados · ⚠ 5 revisar          [Mostrar só os com alerta ☐] │
+├────┬───────────────────────────┬──────┬─────────────┬─────────────┬──────────────┤
+│    │ Produto                   │ Qtd  │ Custo nota  │ Custo atual │ Decisão      │
+├────┼───────────────────────────┼──────┼─────────────┼─────────────┼──────────────┤
+│ ✓  │ 🔗 Parafuso M6 (SKU 118)  │ 200  │ R$ 0,42     │ R$ 0,42     │ sem alteração│
+│ ✓  │ (11 itens resolvidos, display-only — mesmo padrão da linha acima)           │
+│ ⚠  │ 🔗 Porca sextavada        │ 300  │ R$ 0,15     │ R$ 0,11     │ ○ manter     │
+│    │    (SKU 204)              │      │             │             │ ● atualizar  │
+│ ⚠  │ 🔗? "Fita isolante 3M"    │ 40   │ R$ 6,90     │ —           │ vínculo com  │
+│    │    parece: Fita isolante  │      │             │             │ confiança    │
+│    │    preta (SKU 301)        │      │             │             │ média — [aceitar] [buscar outro] [criar novo] │
+│ 🆕 │ Broca aço rápido 6mm      │ 15   │ R$ 3,20     │ —           │ custo inicial│
+│    │ (sem correspondência)     │      │             │             │ (nada a decidir) │
+│ ⚠  │ 🔗 Rebite alumínio        │ 600  │ R$ 0,09     │ R$ 0,06     │ ○ manter     │
+│    │    (SKU 077)              │      │             │             │ ● atualizar  │
+│    │ Isso também vale para os outros 2 itens com o mesmo tipo de aumento?        │
+│    │ [Aplicar aos 2]  [Não, decidir um a um]                                     │
+├────┴───────────────────────────┴──────┴─────────────┴─────────────┴──────────────┤
+│ 15 produtos sem alteração · 3 novos · 2 vínculos e 3 custos ainda pendentes        │
+│                                        [Voltar aos campos]  [Ver resumo e gravar →]│
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Estado de lista vazia (§3.6.2), quando a IA não extrai nenhum item:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  Não foi possível identificar itens nesta nota.                                  │
+│  Revise o restante dos dados — produtos podem ser lançados manualmente depois.   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Acima do teto de itens (§3.6.5), no lugar da tabela:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  ⚠ Esta nota tem 47 itens, acima do que revisamos automaticamente aqui.          │
+│  Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados   │
+│  ao estoque — lance-os manualmente.                                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 8.2 Tela de revisão — Extrato bancário (lote)
@@ -263,5 +355,6 @@ Nada abaixo é requisito; são sugestões, e devem ser tratadas separadas do que
 - **Compass (ADR de arquitetura):** a extração precisa devolver o **trecho de texto de origem por campo** (mínimo) e idealmente coordenadas/bounding box (ideal) — sem isso, §3.1 não é implementável como desenhado. A gravação final precisa ser **transacional/atômica** (§4.4) — não é opcional do ponto de vista de UX, é o que evita o pior cenário do brief (dado pela metade).
 - **Taxonomia de documento:** `DOCUMENT_CATEGORIES` não tem valor para "extrato bancário" hoje (só `nota_fiscal`, `contrato`, `boleto`, `recibo`, `empresa`, `cliente`, `fornecedor`, `outros`). Alguém precisa decidir se cria a categoria `extrato` ou se ela entra como `outros` com metadado próprio — não é decisão de UX, mas bloqueia a tela de classificação (§2, estado "Classificando") se não for resolvida.
 - **Lantern (extração):** este documento assume que dá para saber, por campo, o texto de origem e um score de confiança de 3 níveis (alta/média/baixa) por campo — a granularidade da tela de revisão inteira depende disso existir na resposta da extração.
+- **Contrato de extração de item de NF-e (§3.6):** por item, a extração precisa devolver GTIN quando existir (a ausência muda o default de vínculo — §3.6.3), o `costPrice` atual do cadastro **e** o valor unitário da nota lado a lado (já registrado como decisão do usuário em `decisoes-usuario-importacao-documentos.md`, QA-2), e uma confiança de casamento de produto separada da confiança dos demais campos do item. Sem os três, §3.6.2 não é implementável como desenhado.
 
 Não falei com Compass nem Lantern diretamente — como pedido, todo tráfego passa pelo Orion.

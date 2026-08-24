@@ -1,0 +1,24 @@
+schema: 1
+story: "1.55"
+gate: CONCERNS
+status_reason: "Os quatro gates foram reconfirmados sem regressão atribuível à Story 1.55: testes e build passam, lint global e typecheck permanecem nos baselines, e os cinco arquivos têm lint focado limpo. Permanecem lacunas não bloqueantes de evidência para field_origins completo, constraint UNIQUE real, caso DV=0 e execução de DOMParser no runtime Edge local."
+reviewer: "Quinn"
+updated: "2026-08-22T22:48:51Z"
+top_issues:
+  - id: "TEST-001"
+    severity: medium
+    finding: "AC8 valida o payload completo em um cenário e defaults/múltiplas duplicatas em cenários separados, mas os testes conferem apenas duas chaves de field_origins; não há comparação completa incluindo opcionais, defaults, múltiplas duplicatas e ausência de dup."
+    suggested_action: "Adicionar asserção deep-equal do field_origins esperado para os cenários com e sem campos opcionais e com múltiplas/zero duplicatas."
+  - id: "TEST-002"
+    severity: medium
+    finding: "AC10 simula DocumentExtractionPersistenceError(23505), mas não executa duas tentativas contra a constraint UNIQUE (company_id, idempotency_key) nem confirma em banco a inexistência da segunda proposta."
+    suggested_action: "Adicionar teste de integração autorizado contra o ambiente apropriado, sem migration, demonstrando a segunda tentativa como duplicate_nfe e uma única proposta persistida."
+  - id: "REL-001"
+    severity: medium
+    finding: "AC4 usa DOMParser e os testes passam em Vitest/jsdom, mas não há runtime Deno/Supabase Edge local disponível para confirmar comportamento de parse/malformed XML no ambiente de produção."
+    suggested_action: "Executar smoke test em runtime Edge/Deno autorizado antes do deploy, cobrindo XML malformado, namespace e rejeição de DOCTYPE/ENTITY."
+  - id: "TEST-003"
+    severity: low
+    finding: "AC6 cobre chave válida, DV adulterado, tamanho, modelo e CNPJ, mas não possui teste explícito de chave válida cujo DV calculado resulte em zero."
+    suggested_action: "Adicionar fixture determinística com resultado de módulo 11 igual a 0 e asserção de aceitação."
+waiver: { active: false }

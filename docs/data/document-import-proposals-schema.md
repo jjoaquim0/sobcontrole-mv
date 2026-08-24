@@ -213,3 +213,54 @@ Os quatro campos `new_product_*` só são obrigatórios quando o item **não** c
 - **Fato 1 (reescrita em runtime de `reserve_ai_usage`):** confirmado lendo `20260725123000_fix_ai_usage_conflict.sql` por inteiro — o mecanismo é exatamente `pg_get_functiondef` + `replace()` + `EXECUTE`, como descrito.
 - **Onde fui além do brief, não contra ele:** o brief não mencionou que `purchases`/`purchase_items`/`account_payables` usam ID `TEXT` com prefixo em vez de `UUID` — isso não está em nenhuma das fontes de verdade listadas na seção 4. Descobri lendo `src/services/purchaseService.ts` (leitura, não edição — respeitei a fronteira de `src/`) porque sem isso a RPC de aplicação teria gerado DDL estruturalmente incompatível com o schema vivo. Registro isso como o achado mais importante que o brief não continha.
 - **Não encontrei divergência onde o brief afirmou algo que se provou errado.** As três fontes que reverifiquei bateram.
+
+## 10. Divergência entre a versão registrada no banco e o nome do arquivo local (adendo 2026-08-22, achado do Orion)
+
+**Nada nesta seção foi corrigido.** É documentação de um achado — apurei os fatos e as opções, não executei nenhuma delas. Reconciliar é mutação (banco e/ou repositório) e exige autorização própria do usuário, que o Orion vai pedir separadamente.
+
+### 10.1 — O que aconteceu
+
+A migration `20260814100000_document_import_proposals.sql` foi aplicada em 2026-08-22 via `mcp__supabase__apply_migration`, passando `name="document_import_proposals"` (sem o prefixo de timestamp) e o SQL completo do arquivo. A ferramenta gerou seu próprio identificador de versão a partir do momento da chamada, em vez de reaproveitar o timestamp do nome do arquivo local. Confirmei consultando a tabela de rastreamento diretamente:
+
+```sql
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 1;
+-- {"version":"20260822182249","name":"document_import_proposals"}
+```
+
+Enquanto isso, o arquivo em disco continua `supabase/migrations/20260814100000_document_import_proposals.sql` — nada foi renomeado. Resultado: os objetos (tabelas, RLS, RPCs — todos verificados na tarefa anterior) existem no banco e a linha de rastreamento em `schema_migrations` tem `version=20260822182249`; o repositório git tem o arquivo correspondente sob um prefixo de versão diferente (`20260814100000`). É a mesma migration, duas identidades diferentes em dois lugares que precisam concordar.
+
+### 10.2 — Risco concreto
+
+O Supabase CLI (`supabase db push`, `supabase migration list`) decide o que está pendente comparando o prefixo de timestamp de cada arquivo em `supabase/migrations/` contra os valores de `version` já presentes em `supabase_migrations.schema_migrations` no banco de destino — por igualdade exata da string de versão, não por conteúdo/hash do SQL. *(Baseado no comportamento documentado do Supabase CLI; não pude confirmar rodando o comando aqui — CLI indisponível neste ambiente, mesma lacuna já registrada na seção 5.)*
+
+Como `20260814100000` não existe na tabela (só `20260822182249` existe, mesmo `name`, `version` diferente), um `supabase db push` futuro:
+
+1. Vai considerar `20260814100000_document_import_proposals.sql` **não aplicada**, e vai tentar rodá-la de novo.
+2. `CREATE TABLE IF NOT EXISTS` e `CREATE INDEX IF NOT EXISTS` não quebram (idempotentes). Mas as 5 `CREATE POLICY` e os 3 `CREATE TRIGGER` do arquivo **não têm `IF NOT EXISTS`** no Postgres — cada um falha com `duplicate_object` (SQLSTATE 42710) porque a policy/trigger de mesmo nome já existe nos objetos criados hoje. A migration inteira roda dentro de `BEGIN/COMMIT`, então o push falha inteiro no primeiro `CREATE POLICY` que encontrar, sem deixar objeto pela metade — mas quebra a operação de push como um todo.
+3. Efeito colateral: como o CLI aplica migrations pendentes em ordem de versão, qualquer push subsequente — inclusive um push legítimo carregando uma migration nova sem relação nenhuma com esta — provavelmente para no mesmo ponto, porque `20260814100000` fica na frente na fila de pendentes. Ninguém consegue aplicar nada novo até isso ser corrigido.
+4. Quem for rodar esse push (hoje isso é atribuição exclusiva do `@devops`) veria um erro de policy/trigger duplicado sem contexto óbvio de que a causa raiz é uma divergência de versão — tempo de investigação reconstruindo o que já está apurado aqui.
+
+**Não há CI configurado hoje rodando `db push` automaticamente** — verifiquei, não existe `.github/workflows/` no repositório. O risco não é iminente/automático; só se materializa na próxima vez que alguém rodar `db push` manualmente, o que pode ser exatamente quando `20260814101500_ai_usage_feature_dimension.sql` for autorizada e chegar a vez de aplicá-la.
+
+### 10.3 — Opções de reconciliação, com o custo de cada uma
+
+**Opção A — `supabase migration repair` (caminho oficial do CLI)**
+`supabase migration repair --status reverted 20260822182249` seguido de `supabase migration repair --status applied 20260814100000`.
+Reescreve só a linha de metadata em `schema_migrations`; não toca nenhum objeto de schema já criado (tabela/policy/RPC).
+Custo: risco técnico baixo — é o caminho suportado oficialmente para este cenário exato. Exige CLI instalado, projeto linkado e credencial de acesso ao banco — nada disso está disponível neste ambiente hoje; provavelmente precisa ser rodado por quem tiver o CLI configurado (`@devops`). Ainda é mutação no banco — precisa da autorização que o Orion vai pedir.
+
+**Opção B — `UPDATE` direto na tabela de rastreamento**
+`UPDATE supabase_migrations.schema_migrations SET version = '20260814100000' WHERE version = '20260822182249';`
+Mesmo resultado líquido da Opção A, via SQL direto em vez do comando oficial.
+Custo: executável neste ambiente agora mesmo (via `execute_sql`, sem depender do CLI), mas pula qualquer validação interna que `migration repair` faça além do simples `UPDATE` — não tenho como confirmar se há alguma checagem adicional, porque não tenho o CLI para inspecionar seu código. Risco marginalmente maior que A por ser bypass do caminho suportado; o efeito líquido observável é o mesmo, dado o que inspecionei na tabela (`version`, `name`, `statements`).
+
+**Opção C — renomear o arquivo local para bater com a versão do banco**
+`git mv supabase/migrations/20260814100000_document_import_proposals.sql supabase/migrations/20260822182249_document_import_proposals.sql`
+Zero mutação no banco — resolve a divergência só do lado do repositório.
+Custo: não é grátis do lado da documentação/histórico. O nome `20260814100000` está citado literalmente em pelo menos 10 arquivos do repo, incluindo: o próprio rollback (`supabase/rollbacks/20260814100000_document_import_proposals.down.sql`, que também precisaria ser renomeado para manter o pareamento migration/rollback já usado no projeto), o comentário de cabeçalho de `20260814101500_ai_usage_feature_dimension.sql` (que se refere a esta migration pelo nome), esta própria nota (seções 1, 2.3a, 7), e handoffs/briefs de outros agentes (`.aiox/handoffs/`, `.aiox/briefs/`) que não são meus para editar. Renomear também troca, no nome do arquivo, a data de autoria/desenho (14/08) pela data de aplicação (22/08) — inverte a convenção que o projeto já usa (os noops `20260812013500`/`20260812013600` mantêm a data de criação no nome, não a de aplicação) — e inverte a ordem lexical em relação a `20260814101500`, que passaria a vir **antes** dela na pasta apesar de ser posterior na sequência do ADR (não há FK entre as duas, então isso não quebra nada funcionalmente, mas contraria a narrativa 1→2 que o ADR e esta nota descrevem).
+
+**Opção D — adiar a reconciliação até a aplicação de `20260814101500`**
+Não mexe em nada agora; resolve (via A, B ou C) só quando `20260814101500` for autorizada e estiver prestes a ser aplicada.
+Custo: risco fica latente sem custo adicional até lá, mas quem rodar um `db push` por qualquer outro motivo antes disso (deploy de outra migration, checagem de rotina) esbarra na falha sem aviso prévio. Adiar não reduz o trabalho de reconciliação, só o momento em que ele acontece — e "sob pressão de cronograma" é exatamente o cenário que esta nota já evita alhures (seção 4, item 3).
+
+**O que eu recomendo, sem ter executado nada:** Opção A quando o `@devops` tiver o CLI configurado e o usuário autorizar — é o caminho suportado oficialmente e não exige reinterpretar nenhuma referência de nome no resto do repositório. Se o CLI não estiver disponível a tempo de aplicar `20260814101500`, a Opção B entrega o mesmo resultado técnico com uma ferramenta já disponível agora, ao custo de pular a validação embutida do comando oficial. Não recomendo a Opção C como primeira escolha — o custo de coordenação (rollback + comentário da migration irmã + esta nota + documentos de outros agentes) é maior do que o de A/B para o mesmo resultado líquido.

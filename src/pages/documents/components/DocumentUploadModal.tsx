@@ -2,12 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertCircle, CheckCircle2, FileWarning, Loader2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { DocumentCategory, DocumentRelatedType, DocumentVisibility } from '../../../types';
+import { Document, DocumentCategory, DocumentRelatedType, DocumentVisibility } from '../../../types';
 import { DOCUMENT_CATEGORIES, DocumentUploadInput, formatFileSize } from '../../../services/documentService';
 import { DOCUMENT_RELATION_TYPES, DOCUMENT_STORAGE_CONFIG, DOCUMENT_VISIBILITIES, validateDocumentFile } from '../../../services/documentDomain';
 import { useDocumentRelatedEntities } from '../../../hooks/useDocuments';
 import { CategoryIcon } from './CategoryIcon';
 import { AiSiteIntegrationAction } from './AiSiteIntegrationAction';
+import { DocumentImportAction } from './DocumentImportAction';
 
 const MAX_FILES_PER_BATCH = 5;
 
@@ -17,12 +18,13 @@ interface PendingFile {
   file: File;
   state: UploadState;
   error?: string;
+  document?: Document;
 }
 
 export interface DocumentUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpload: (file: File, input: DocumentUploadInput) => Promise<void>;
+  onUpload: (file: File, input: DocumentUploadInput) => Promise<Document>;
   isLoading?: boolean;
 }
 
@@ -108,8 +110,8 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({ isOpen
       const item = items[index];
       updateItem(index, { state: 'uploading', error: undefined });
       try {
-        await onUpload(item.file, input);
-        updateItem(index, { state: 'success' });
+        const uploadedDocument = await onUpload(item.file, input);
+        updateItem(index, { state: 'success', document: uploadedDocument });
         successCount += 1;
       } catch (error) {
         updateItem(index, { state: 'error', error: error instanceof Error ? error.message : 'Não foi possível enviar este arquivo.' });
@@ -152,7 +154,7 @@ export const DocumentUploadModal: React.FC<DocumentUploadModalProps> = ({ isOpen
                     </div>
                     {item.state === 'uploading' && <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200 dark:bg-white/10"><div className="h-full w-3/4 animate-pulse rounded-full bg-[#10b981]" /></div>}
                     {item.error && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{item.error}</p>}
-                    {item.state === 'success' && <div className="mt-2"><AiSiteIntegrationAction compact /></div>}
+                    {item.state === 'success' && item.document && <div className="mt-2 flex flex-wrap items-center gap-2"><AiSiteIntegrationAction compact /><DocumentImportAction document={item.document} compact /></div>}
                   </div>
                 ))}
               </div>}

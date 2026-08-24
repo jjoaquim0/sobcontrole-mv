@@ -69,9 +69,7 @@ export const DocumentsPage: React.FC = () => {
     setDateTo('');
   };
 
-  const handleUpload = async (file: File, input: DocumentUploadInput) => {
-    await uploadDocument({ file, input });
-  };
+  const handleUpload = (file: File, input: DocumentUploadInput) => uploadDocument({ file, input });
 
   const columns: Column<Document>[] = [
     { key: 'file', label: '', render: (row) => <CategoryIcon mimeType={row.mimeType} size="sm" /> },

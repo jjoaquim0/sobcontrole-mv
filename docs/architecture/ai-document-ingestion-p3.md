@@ -529,3 +529,210 @@ que supere ou substitua o AC9 antigo, não um teste novo que finge que os dois c
 - **`@aiox-master` (Orion):** leva a pré-condição de reconciliação (§10 do schema doc) e a
   autorização de migration ao usuário quando ele voltar; sequencia a story sabendo que há um passo
   bloqueado no meio dela (seção "Migration" acima).
+
+## Adendo (2026-08-26) — DATA-001 (grant ausente em `current_cost`) e SEC-001 (validação
+cross-tenant de `matched_product_id` na aplicação da proposta)
+
+Decisão sobre o gate FAIL emitido pelo `@qa` (Beacon) para a Story 1.57
+(`docs/qa/gates/1.57-itens-produtos-estoque-nfe.yml`, commit `a4f237c`). Pedido do `@aiox-master`
+em `.aiox/briefs/compass-decisao-data-001-current-cost.md`. Verifiquei todos os fatos do brief e
+acrescentei os que faltavam para fechar os dois achados; nada deste adendo foi implementado, nenhuma
+escrita foi feita em produção, e as consultas ao banco `qxcchymwswontqcwqogm` foram todas `SELECT`.
+
+### O que verifiquei, linha a linha
+
+**Sobre `current_cost` (DATA-001):**
+
+- **O grant realmente falta.** `20260814100000_document_import_proposals.sql:241-242`:
+  `GRANT UPDATE (payload, matched_product_id, update_cost_decision) ON TABLE
+  document_import_proposal_items TO authenticated` — `current_cost` não está na lista. Bate com a
+  leitura do Orion em `information_schema.column_privileges`.
+- **A coluna nunca teve dado real.** `supabase/functions/_shared/document-import/nfe.ts:410`
+  grava `current_cost: null` no momento da extração — sempre, incondicionalmente, mesmo quando o
+  item casa por GTIN com um produto existente. `service_role` nunca populou a coluna com o custo do
+  produto casado. **Isto muda o enquadramento do problema:** não existe "cache antigo" para ficar
+  incoerente — a coluna sempre foi `NULL` em produção, porque o único caminho que já tentou
+  escrevê-la (o cliente, via autosave) sempre falhou por falta de grant desde que a tabela existe.
+- **O cliente envia a coluna nos dois fluxos.** Confirmo o achado do Orion:
+  `documentImportService.ts:670-674` (`saveNfeProposalItem`) grava `update.current_cost` sempre que
+  `patch.currentCost !== undefined`; `NfeItemReviewTable.tsx:225`, `onSelectProduct` envia
+  `currentCost: selected.costPrice` e `onCreateNew` envia `currentCost: null` — `null !== undefined`,
+  então os dois caem no `UPDATE`.
+- **O `UPDATE` é uma única instrução com várias colunas no `SET`.** Postgres recusa a instrução
+  inteira se faltar `GRANT` em qualquer coluna do `SET` — não existe sucesso parcial. Isso quer dizer
+  que hoje `onSelectProduct`/`onCreateNew` não falham "só no custo": **`matched_product_id` e
+  `update_cost_decision` também não são persistidos**, porque estão na mesma instrução que
+  `current_cost`. Bate com o texto do gate ("a seleção/criação não consegue salvar a decisão
+  completa") e explica por que o achado é severidade alta — o vínculo de produto inteiro está
+  bloqueado, não um campo acessório.
+- **O cliente já resolve o custo atual por junção viva com `products`, em dois pontos independentes,
+  nenhum dos dois dependente de `current_cost`:**
+  1. **Depois de selecionar um produto, no mesmo ato.** `NfeItemReviewTable.tsx:225` passa
+     `suggestedProduct: selected` no patch — campo que `NfeProposalItemPatch` já documenta como
+     "mantido apenas no estado da revisão; nunca é persistida" (`documentImportService.ts:657-658`).
+     `useDocumentImport.ts:223-227` funde esse campo de volta no estado local depois do `save`:
+     `{ ...saved, suggestedProduct: patch.suggestedProduct === undefined ? item.suggestedProduct :
+     (patch.suggestedProduct ?? undefined) }`. Como `onSelectProduct` sempre envia
+     `suggestedProduct`, o item em memória passa a carregar o produto **recém-selecionado, com o
+     `costPrice` dele já embutido** — sem round-trip ao banco para saber o custo.
+  2. **Em qualquer carregamento ou recarregamento da proposta.** `getNfeProposalItems`
+     (`documentImportService.ts:606-624`) chama `loadNfeProductSuggestions`
+     (`documentImportService.ts:576-604`), que busca em `products` por `matchedProductId`
+     **diretamente por chave primária** (`.eq('company_id', companyId).in('id', matchedIds)`) e
+     recompõe `suggestedProduct` com o `cost_price` **atual** do cadastro. Isso roda toda vez que a
+     tela é aberta ou a proposta é recarregada — não é um efeito colateral raro, é o caminho normal.
+- **A ordem de resolução do produto exibido sempre prefere a junção viva.**
+  `documentImportService.ts:96-111` (`selectedProduct`, espelhado em
+  `NfeItemReviewTable.tsx:47-59` como `getSelectedProduct`): a primeira condição checada é
+  `item.matchedProductId && item.suggestedProduct?.id === item.matchedProductId` — que é
+  precisamente o que os dois pontos acima garantem estar preenchido, tanto logo após a seleção
+  quanto após qualquer reload. **O fallback sintético que usa `item.currentCost` como `costPrice`
+  só é alcançado quando `suggestedProduct` não teria um produto casando com `matchedProductId`** —
+  na prática, isso só acontece se o produto casado for excluído depois do vínculo (o
+  `ON DELETE SET NULL` da FK não cobre esse caso enquanto a linha do produto ainda existe; e se ela
+  for apagada, `matched_product_id` vira `NULL` pelo próprio `ON DELETE SET NULL`, então nem esse
+  fallback chega a disparar de fato hoje). Não encontrei nenhum caminho, no código atual, em que
+  trocar o produto casado deixe a tela exibindo um `current_cost` desatualizado.
+
+**Sobre `matched_product_id` sem checagem de empresa na RPC (SEC-001):**
+
+- Consultei `information_schema.columns` para `purchase_items`: a tabela tem `id, purchase_id,
+  product_id, quantity, unit_cost, subtotal` — **não tem `company_id`**. O único jeito de escopar
+  uma linha de `purchase_items` por empresa é via `purchase_id → purchases.company_id`.
+- Consultei `pg_policy` para `purchase_items`: uma única política `FOR ALL`, `USING (EXISTS (SELECT 1
+  FROM purchases WHERE purchases.id = purchase_items.purchase_id AND purchases.company_id =
+  get_user_company_id()))`, sem `WITH CHECK` próprio (o Postgres usa o `USING` também para `INSERT`
+  quando `WITH CHECK` está ausente). **Essa política nunca olha para `product_id`.**
+- Consultei `pg_policy` para `products`: `USING (company_id = get_user_company_id())` — isolamento
+  correto, e é o que impede um membro da empresa A de *ler* diretamente um produto da empresa B.
+- `matched_product_id UUID REFERENCES public.products(id) ON DELETE SET NULL`
+  (`20260814100000_document_import_proposals.sql:123`) é uma FK simples, sem escopo de empresa. A
+  RLS de `document_import_proposal_items` (que o usuário edita via `saveNfeProposalItem`) só valida
+  que **o item** pertence à empresa do usuário — nunca que o produto referenciado por
+  `matched_product_id` pertence a ela.
+- Na RPC hoje em produção (`20260825140000_nfe_purchase_apply_stock_increment.sql`, confirmado por
+  `pg_get_functiondef` no gate e relido por mim linha a linha):
+  - `v_product_id := v_item.matched_product_id;` (linha 136) — aceita o valor sem checagem.
+  - O braço por **GTIN é seguro**: `SELECT product.id ... WHERE product.company_id = v_company_id
+    AND product.barcode = ...` (linhas 141-144) — escopado.
+  - O `UPDATE products SET cost_price = ...` (linha 180-182) e o `UPDATE products SET
+    current_quantity = current_quantity + ...` (linha 195-197, D10) **são ambos escopados** por
+    `WHERE id = v_product_id AND company_id = v_company_id` — para um `product_id` de outra empresa,
+    essas duas instruções afetam **zero linhas**, silenciosamente. Não há escrita cross-tenant em
+    `products`.
+  - O `INSERT INTO purchase_items (..., product_id, ...) VALUES (..., v_product_id, ...)` (linhas
+    202-209) **não tem nenhum filtro de empresa** — nem `WHERE`, nem a RLS de `purchase_items` (que
+    só olha `purchase_id`), nem a FK (que só olha se o produto existe, em qualquer empresa).
+
+### D11 — DATA-001: corrigir no cliente (opção A). Não conceder `GRANT UPDATE (current_cost)`
+
+**Escolhida: opção A do brief — parar de enviar `current_cost` no autosave.** Não é decisão por
+eliminação; é decisão porque o cliente já resolve o dado certo por outro caminho, então dar grant
+resolveria um sintoma sem que exista nenhum uso legítimo restante para a escrita:
+
+- **A opção B (grant) abriria escrita numa coluna que a análise acima mostra ser, na prática,
+  supérflua para o próprio cliente que a escreveria.** O "custo atual" que a tela mostra já vem da
+  junção viva com `products` (achados acima), nunca de `current_cost`, em nenhum dos dois casos que
+  o brief pediu para examinar (seleção e recarregamento). Conceder grant não corrige nenhum
+  comportamento observável da tela — ela já funciona certo para o dado de custo assim que o
+  `UPDATE` deixar de falhar. O único efeito de B seria permitir que `authenticated` escreva uma
+  coluna que hoje é, e continuaria sendo, decorativa.
+- **B também contraria o próprio motivo da coluna existir sob `service_role` apenas** — o padrão do
+  schema (`REVOKE ALL ... GRANT SELECT ... GRANT UPDATE (subset)`) é deliberado em todo este ADR
+  (D2, seção "Delegações": `@data-engineer` fixa `SECURITY INVOKER` + `auth.uid()` +
+  `REVOKE ... FROM anon`, e o padrão geral do projeto é dar ao cliente exatamente as colunas que ele
+  precisa escrever, não todas). Ampliar o grant por conveniência, quando o problema tem correção
+  sem migration, inverteria esse princípio sem ganho.
+- **A opção C (a terceira via que o brief pediu, se houvesse uma melhor) não existe aqui** — não há
+  uma opção C genuinamente diferente de A. "Parar de enviar o campo" e "o cliente já deriva o dado
+  por outro caminho" são a mesma decisão vista de dois ângulos, não duas escolhas concorrentes.
+
+**Resposta direta ao ponto que o Orion mais quis que eu examinasse — "o que acontece com o cache de
+`current_cost` quando o usuário troca de produto casado":** nada de errado acontece, porque a tela
+nunca leu esse cache para exibir a troca. Nos dois pontos onde a troca de produto poderia mostrar
+dado desatualizado — a fração de segundo logo após o clique, e qualquer reload da proposta — o
+código já busca o custo atual direto de `products`, ignorando `current_cost`. A suspeita do brief era
+razoável e vale ter sido verificada com código, não só com leitura de grants; mas o risco concreto
+não se confirmou.
+
+### Forma da mudança, para orientar o `@dev`
+
+Sem migration, sem autorização do usuário, sem tocar produção:
+
+1. **`documentImportService.ts` (`saveNfeProposalItem`):** remover o bloco que mapeia
+   `patch.currentCost` para `update.current_cost` (linhas 670-675 atuais). O campo `currentCost` do
+   `NfeProposalItemPatch` deixa de ser enviado ao banco; `suggestedProduct` continua sendo o único
+   canal para o custo do produto selecionado, exatamente como já é hoje (nunca foi persistido, só
+   passa pelo estado local).
+2. **`NfeItemReviewTable.tsx` (linha 225):** remover `currentCost: selected.costPrice` de
+   `onSelectProduct` e `currentCost: null` de `onCreateNew`. Manter `suggestedProduct` nos dois —
+   é o campo que já sustenta a exibição correta.
+3. **Não alterar** `NfeImportProposalItem.currentCost` como campo de leitura, nem `ITEM_SELECT`, nem
+   `mapItem`: a coluna continua existindo, continua sendo lida (sempre `NULL` na prática), e o
+   fallback sintético em `selectedProduct`/`getSelectedProduct` que a usa fica como está — ele só é
+   um `NULL` a mais numa exibição de "—" no caso raro de produto excluído, não uma regressão.
+4. Depois da mudança, o `UPDATE` de `saveNfeProposalItem` para `onSelectProduct`/`onCreateNew` passa
+   a conter só `matched_product_id` e `update_cost_decision` (mais `payload`, quando aplicável) —
+   todas colunas com grant hoje. Isso destrava AC3 e AC4 do gate sem depender de nenhuma migration.
+
+**A quem cabe:** `@dev`. Código puro, sem DDL, sem `GRANT`, sem dependência da reconciliação do
+schema doc §10 nem de autorização do usuário — pode ser feito assim que a story voltar para
+`InProgress`.
+
+**Recomendação fora do pedido (Artigo IV), não decisão desta onda:** com o cliente parando de
+escrever `current_cost` e o `service_role` nunca tendo escrito nela, a coluna fica permanentemente
+`NULL` e sem consumidor. Vale avaliar, em manutenção futura de schema, se ela deve ser removida por
+higiene — não é urgente e não bloqueia nada aqui.
+
+### SEC-001 — achado confirmado real. Não conserto; nomeio o dono e o caminho
+
+**Confirmo o achado do `@qa`: é vetor real, não teórico.** Um usuário autenticado da empresa A pode
+gravar em seu próprio item de proposta (linha que passa pela RLS de
+`document_import_proposal_items` normalmente, porque essa RLS só valida a empresa do item, nunca do
+produto referenciado) um `matched_product_id` apontando para um produto de qualquer outra empresa —
+nada no schema impede: a FK é sem escopo, a RLS de `purchase_items` só valida `purchase_id`, e a
+RLS de `products` (que impediria leitura direta) não entra em jogo porque a escrita acontece via a
+função `SECURITY INVOKER`, que já rodou a leitura do item antes de tentar casar o produto.
+
+**O que o vetor consegue, hoje, na função aplicada em produção:** inserir em `purchase_items` uma
+linha cujo `purchase_id` pertence à empresa A e cujo `product_id` pertence à empresa B — as duas
+únicas escritas em `products` (custo e, desde D10, estoque) ficam de fato protegidas pelo
+`AND company_id = v_company_id` no `WHERE`, então não há escrita cross-tenant em `products`; o dano
+fica contido em `purchase_items`, que passa a ter uma referência a um produto de fora da própria
+empresa. Sob a RLS normal do app, a empresa B não vê essa linha (ela só aparece filtrando por
+`purchases.company_id`, que é da empresa A) e a empresa A, ao tentar exibir esse item de compra
+junto do produto, esbarra na RLS de `products` e não vê os dados do produto de B — então não há
+vazamento direto pela navegação normal da aplicação. O risco real está em **qualquer caminho que
+não passe pela RLS de `products`** — rotina com `service_role`, relatório administrativo, export,
+ou qualquer feature futura que confie no invariante "todo `purchase_items.product_id` pertence à
+mesma empresa da `purchase_id`" sem reconferir. Esse invariante está quebrado hoje, silenciosamente,
+sem que a função avise ou rejeite.
+
+**Caminho de correção (não implementado aqui):** dentro do mesmo laço de itens da RPC, antes de usar
+`v_product_id` (nos dois ramos — casado por `matched_product_id` OU por GTIN, embora o de GTIN já
+seja seguro), validar explicitamente `EXISTS (SELECT 1 FROM products WHERE id = v_product_id AND
+company_id = v_company_id)`; se falhar, `RAISE EXCEPTION` e rejeitar a aplicação inteira — no mesmo
+estilo de falha alta que a função já usa para os outros estados inválidos (proposta não encontrada,
+categoria/nome/preço ausentes no produto novo etc.). Não silenciar nem pular o item: a função já
+trata qualquer item inválido como motivo para abortar a proposta inteira, e este caso deve seguir o
+mesmo padrão — aplicar parcialmente uma proposta com um item cross-tenant seria pior que rejeitá-la.
+
+**A quem cabe:** `@data-engineer` (Dara) — é `CREATE OR REPLACE FUNCTION` sobre
+`apply_nfe_purchase_proposal`, mesma assinatura, mesmo padrão de arquivo novo timestamped que D10 já
+usou (não editar `20260814100000` nem `20260825140000` in-place). **Exige migration nova e depende de
+autorização explícita do usuário antes de ser aplicada** — mesmo regime de NFR-2 desta P3, e mesma
+dependência de sequenciamento que D10 já tem com a reconciliação de
+`docs/data/document-import-proposals-schema.md` §10. Não decidi se essa correção deve estar na mesma
+migration de D10 ou em arquivo separado — isso é forma, e cabe à Dara; o `@aiox-master` decide se
+isso bloqueia `Done` da Story 1.57 ou vira item de acompanhamento, porque é severidade `medium` no
+gate, não `high`.
+
+### Delegações deste adendo
+
+- **`@dev`:** aplica a mudança de cliente descrita em D11 (dois arquivos, sem DDL). Desbloqueia AC3 e
+  AC4 sem depender de migration nem de autorização do usuário.
+- **`@data-engineer` (Dara):** escreve a validação de empresa em `matched_product_id` dentro de
+  `apply_nfe_purchase_proposal`, em migration nova com rollback pareado. Não aplica.
+- **`@aiox-master` (Orion):** leva ao usuário, quando ele decidir sequenciar a correção de SEC-001,
+  a autorização de migration — junto ou separado da de D10, é dele decidir. DATA-001 não precisa
+  dessa conversa: é código, e pode seguir assim que a story voltar para `InProgress`.

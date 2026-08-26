@@ -264,3 +264,87 @@ Não mexe em nada agora; resolve (via A, B ou C) só quando `20260814101500` for
 Custo: risco fica latente sem custo adicional até lá, mas quem rodar um `db push` por qualquer outro motivo antes disso (deploy de outra migration, checagem de rotina) esbarra na falha sem aviso prévio. Adiar não reduz o trabalho de reconciliação, só o momento em que ele acontece — e "sob pressão de cronograma" é exatamente o cenário que esta nota já evita alhures (seção 4, item 3).
 
 **O que eu recomendo, sem ter executado nada:** Opção A quando o `@devops` tiver o CLI configurado e o usuário autorizar — é o caminho suportado oficialmente e não exige reinterpretar nenhuma referência de nome no resto do repositório. Se o CLI não estiver disponível a tempo de aplicar `20260814101500`, a Opção B entrega o mesmo resultado técnico com uma ferramenta já disponível agora, ao custo de pular a validação embutida do comando oficial. Não recomendo a Opção C como primeira escolha — o custo de coordenação (rollback + comentário da migration irmã + esta nota + documentos de outros agentes) é maior do que o de A/B para o mesmo resultado líquido.
+
+### 10.4 — Reincidência 2026-08-26 (SEC-001): mesma divergência, risco menor, Opção C executada
+
+**Executado nesta seção: sim — Opção C, renomear os arquivos locais.** É zero mutação no banco;
+as fronteiras da tarefa (`.aiox/briefs/cistern-reconciliar-versao-sec-001.md`) autorizavam decidir
+e executar essa opção especificamente, ao contrário do caso de 2026-08-22 acima, que ficou só
+documentado.
+
+**O que aconteceu, de novo:** `apply_migration` foi chamado com
+`name="apply_nfe_purchase_proposal_tenant_check"` e o SQL de
+`supabase/migrations/20260826120000_apply_nfe_purchase_proposal_tenant_check.sql` (o `CREATE OR
+REPLACE FUNCTION` que fecha o SEC-001 do gate da Story 1.57). A ferramenta gerou de novo seu
+próprio identificador de versão a partir do momento da chamada, em vez de reaproveitar o timestamp
+do nome do arquivo:
+
+```sql
+SELECT version, name FROM supabase_migrations.schema_migrations ORDER BY version DESC LIMIT 3;
+-- {"version":"20260826230250","name":"apply_nfe_purchase_proposal_tenant_check"}  <- esta, hoje
+-- {"version":"20260825140000","name":"nfe_purchase_apply_stock_increment"}       <- D10, sem divergência
+-- {"version":"20260814100000","name":"document_import_proposals"}               <- reconciliada em 2026-08-22 (10.1-10.3 acima)
+```
+
+**Correção a uma leitura minha anterior, feita fora deste documento:** eu tinha reportado ao
+`@aiox-master` que essa divergência era "o mesmo padrão já visto na D10". **Não é.** Os três números
+acima mostram que a D10 (`20260825140000`) está registrada com exatamente o timestamp do próprio
+nome de arquivo, sem nenhuma divergência — só a migration de hoje diverge. O padrão real é: a
+ferramenta `apply_migration` diverge *sempre que gera versão própria*, o que já aconteceu duas vezes
+em três aplicações (2026-08-22 e hoje) e não aconteceu na D10 por motivo que não constatei aqui
+(possivelmente uma corrida de tempo entre o timestamp do arquivo e o momento da chamada, não
+apurada). Tratar como "padrão já visto" sem checar os números era impreciso — o Orion pegou o erro
+antes de eu propagá-lo adiante.
+
+**Por que o risco aqui é menor que o do caso de 2026-08-22:** o conteúdo desta migration é só
+`CREATE OR REPLACE FUNCTION` + `REVOKE`/`GRANT` + `COMMENT ON FUNCTION` — todos idempotentes. Um
+`supabase db push` futuro que considerasse `20260826120000` (ou, depois desta reconciliação,
+`20260826230250` sob o nome antigo) pendente a reaplicaria sem erro, porque não há `CREATE POLICY`
+nem `CREATE TRIGGER` sem `IF NOT EXISTS` nesta migration — a categoria de falha que travava a fila
+no caso original (10.2, item 2) não se aplica aqui. O risco que existia era só de **futuro**: uma
+D12 que alterasse esta mesma função de novo, chegando depois deste arquivo na ordem lexical do
+diretório mas rodando sobre um estado que o arquivo `20260826120000` (não reconciliado) reaplicaria
+por cima dela numa reconstrução a partir do zero. Renomear elimina esse risco futuro sem precisar
+esperar uma D12 existir para então agir.
+
+**O que foi feito:** `git mv` dos dois arquivos, sem alterar uma linha de SQL em nenhum dos dois:
+
+- `supabase/migrations/20260826120000_apply_nfe_purchase_proposal_tenant_check.sql` →
+  `supabase/migrations/20260826230250_apply_nfe_purchase_proposal_tenant_check.sql`
+- `supabase/rollbacks/20260826120000_apply_nfe_purchase_proposal_tenant_check.down.sql` →
+  `supabase/rollbacks/20260826230250_apply_nfe_purchase_proposal_tenant_check.down.sql`
+
+Por que Opção C foi barata desta vez, ao contrário do caso original: o arquivo é novo (commit
+`02ad729`, do mesmo dia), sem menção ao próprio timestamp dentro do seu conteúdo (conferido por
+busca antes de renomear — nem a migration nem o rollback citam `20260826120000` no corpo, só no
+nome), e as únicas referências textuais ao nome antigo em todo o repositório eram três briefs do
+próprio `@aiox-master` (`cistern-migration-sec-001-cross-tenant.md`, `cistern-aplicar-sec-001.md`,
+`cistern-reconciliar-versao-sec-001.md`) e o brief de re-gate do `@qa`
+(`beacon-regate-1.57.md`) — nenhum deles meu para editar, e todos corretos como registro histórico
+do que foi pedido/feito no momento em que o arquivo ainda se chamava assim. Nenhum comentário de
+outra migration cita este arquivo pelo nome (diferente do caso original, em que
+`20260814101500` citava `20260814100000` no próprio cabeçalho).
+
+**Ressalva que não corrigi, por estar fora do escopo autorizado:** o cabeçalho do rollback renomeado
+ainda contém, em comentário, a frase "desfaz
+`20260826120000_apply_nfe_purchase_proposal_tenant_check.sql`" — o nome antigo, agora inexato. A
+tarefa que motivou este adendo autorizava renomear os arquivos, não editar o SQL/comentário de
+nenhum dos dois; deixei o texto como está e registro aqui a inexatidão para quem ler o rollback
+depois de mim.
+
+**Como evitar a terceira ocorrência:** o achado mais valioso desta reincidência. A definição da
+ferramenta `mcp__claude_ai_Supabase__apply_migration` disponível neste ambiente aceita apenas três
+parâmetros — `project_id`, `name`, `query` — **não existe parâmetro de versão/timestamp explícito**.
+Não há como instruir a ferramenta a registrar a migration sob o timestamp do arquivo; ela sempre
+deriva a versão do momento da chamada. Duas consequências práticas:
+
+1. **Todo `apply_migration` futuro vai divergir do nome do arquivo local**, a menos que o timestamp
+   do arquivo já tenha sido escolhido para coincidir com o momento exato da aplicação — impossível
+   de prever com precisão ao escrever o arquivo, porque escrita e aplicação nesta linha de trabalho
+   sempre acontecem em sessões/momentos diferentes (autorização do usuário no meio).
+2. **A reconciliação (checar `list_migrations`/`schema_migrations` e, se divergente, renomear ou
+   registrar o adendo) precisa virar passo padrão de pós-aplicação, não uma correção pontual.**
+   Quem aplicar a próxima migration por este caminho (`apply_migration`, este mesmo MCP) deve, no
+   mesmo relatório de verificação pós-aplicação, comparar a versão registrada contra o nome do
+   arquivo — igual ao que já é pedido para `NOT EXISTS`/contagens de domínio — e sinalizar
+   divergência de imediato, em vez de assumir que bateu.

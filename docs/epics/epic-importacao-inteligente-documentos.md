@@ -67,6 +67,7 @@ A sequência segue a "Sequência sugerida" do ADR da Aria — não encontrei arg
 - **Depende de:** Onda 1 (RPC de aplicação) e Onda 3 (reaproveita o padrão de revisão/confirmação).
 - **Critério de conclusão (falsificável):** uma linha digitável válida de **antes** da virada do fator (21/02/2025) e uma de **depois** decodificam o vencimento corretamente — teste explícito dos dois lados da virada, não um caso genérico. Uma proposta de boleto sem fornecedor resolvido (nem vinculado nem criado na tela) não pode ser confirmada — a RPC de aplicação rejeita, e a UI nunca deixa "Gravar" habilitado nesse estado.
 - **Entrega valor ao usuário?** Sim, incremental — estende a mesma tela de revisão para um segundo tipo de documento.
+- **Escopo confirmado pelo usuário (decisão do usuário, 2026-08-26):** esta onda cobre **só boleto bancário de cobrança, linha digitável de 47 dígitos**. Linha de arrecadação/concessionária (48 dígitos, outro layout, outra aritmética de valor e vencimento) fica **fora desta onda** — ver Onda 8.
 
 ### Onda 5 — Rota de PDF via pdf.js no navegador
 **Decisão do usuário confirmada em 2026-08-14: Opção E (XML/linha digitável) agora, Opção A (pdf.js no navegador) depois.**
@@ -89,6 +90,14 @@ A sequência segue a "Sequência sugerida" do ADR da Aria — não encontrei arg
 - **Depende de:** Onda 3 (mesma tela de revisão, mesmo padrão de confirmação).
 - **Critério de conclusão (falsificável):** dado um contrato, a proposta final não permite "Gravar" enquanto `value` estiver vazio (sem default possível — chutar valor de negócio é pior que pedir) e enquanto `title` não tiver ao menos o sugerido a partir de nome do cliente + data. Confirmar a proposta cria (ou vincula) o cliente e cria a oportunidade com os cinco campos obrigatórios de `Deal` preenchidos.
 - **Entrega valor ao usuário?** Sim, incremental — terceiro tipo de documento coberto.
+
+### Onda 8 — Boleto de arrecadação/concessionária (linha digitável de 48 dígitos)
+**Futura — decisão do usuário, 2026-08-26: "Só bancário agora, concessionária depois".**
+
+- **Objetivo:** ainda não detalhado. Ao decidir o escopo da Onda 4 (boleto bancário de cobrança, 47 dígitos), o @sm levantou que a linha de arrecadação/concessionária tem 48 dígitos, layout próprio e aritmética própria de valor e vencimento — o usuário optou por deixar essa rota fora da Onda 4 e tratá-la depois. "Depois" aqui significa apenas que esta onda existe e está registrada como futura; não implica prioridade, posição na fila ou proximidade de execução.
+- **Depende de:** não avaliado ainda — presumivelmente Onda 3 (mesmo padrão de revisão/confirmação), a confirmar quando esta onda for detalhada.
+- **Critério de conclusão (falsificável):** a definir quando esta onda for especificada.
+- **Entrega valor ao usuário?** A avaliar quando esta onda for especificada.
 
 ---
 

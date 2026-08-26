@@ -736,3 +736,414 @@ gate, não `high`.
 - **`@aiox-master` (Orion):** leva ao usuário, quando ele decidir sequenciar a correção de SEC-001,
   a autorização de migration — junto ou separado da de D10, é dele decidir. DATA-001 não precisa
   dessa conversa: é código, e pode seguir assim que a story voltar para `InProgress`.
+
+## Adendo (2026-08-26) — QO-1, QO-2, QO-3, QO-4, QO-8, QO-9 e QO-10 da Story 1.58 (boleto por linha
+digitável)
+
+Decisão sobre as questões técnicas que o `@sm` deixou abertas em
+`docs/stories/1.58.boleto-linha-digitavel.story.md` (Draft, Onda 4), a pedido do `@aiox-master` em
+`.aiox/briefs/compass-questoes-abertas-1.58.md`, mais QO-10 — achado da `@ux-design-expert` (Uma)
+durante a conciliação de QO-6/QO-7, trazido de volta a mim por não ser decisão de UX. QO-5 (escopo de
+negócio), QO-6 e QO-7 (UX) não são deste adendo — ver seção própria e a atualização em D16 abaixo.
+Nenhuma escrita em produção; as únicas consultas ao banco foram `SELECT` em `information_schema` e
+`pg_catalog` (grants, colunas, constraints e índices). Não editei a story.
+
+### O que verifiquei, linha a linha
+
+- **`document_extraction_jobs.document_version_id` é `NOT NULL REFERENCES document_versions(id)`**
+  (`20260814100000_document_import_proposals.sql:31`). Isso elimina, sem migration, a opção "importação
+  sem documento" do leque da QO-1 — não é possível criar um job sem um `document_version_id` válido
+  hoje, ponto final.
+- **O próprio comentário da coluna `idempotency_key` do job já antecipa o caso do boleto**
+  (`20260814100000_document_import_proposals.sql:34-41`): *"Conhecida de forma síncrona no momento da
+  criação do job para NF-e (chave extraída do XML) e boleto (linha digitável colada pelo usuário)"*.
+  Ou seja, o próprio schema já foi desenhado presumindo que a linha chega **antes ou junto** da
+  criação do job, não depois — bate com a decisão abaixo, não é invenção minha.
+- **`document_versions`** (`20260719130000_document_library_security.sql:25-38`) exige `document_id`
+  (FK `NOT NULL`) e `storage_path TEXT NOT NULL UNIQUE` — uma versão real precisa existir no bucket.
+  **`documents`** (lido ao vivo via `information_schema.columns`, só leitura) tem `source TEXT NOT
+  NULL DEFAULT 'upload'`, **sem `CHECK` restringindo os valores aceitos**
+  (`20260719130000_document_library_security.sql:14`, confirmado sem constraint de enum na consulta
+  remota). Essa coluna já existe exatamente para diferenciar a origem de um documento — é o encaixe
+  natural para a decisão abaixo, sem qualquer alteração de schema.
+- **Grants de `document_import_proposals` para `authenticated`:** só `UPDATE (payload)`
+  (`20260814100000_document_import_proposals.sql:237`). `idempotency_key` e `field_origins` **não**
+  têm grant — permanecem exclusivos de `service_role`, mesmo padrão que já vali em D11 para
+  `current_cost`.
+- **`apply_boleto_payable_proposal`, definição local e relida ao vivo em 2026-08-26** (a mesma que a
+  story já cita em Dev Notes): linhas 586-590 checam **só a presença** de `payable.amount` e
+  `payable.due_date` (`v_payable ? 'amount'`, `? 'due_date'`); linhas 597-598 usam
+  `(v_payable ->> 'amount')::NUMERIC` e `(v_payable ->> 'due_date')::TIMESTAMPTZ` **direto do
+  `payload`**, sem comparar com `idempotency_key` nem recalcular nada. Como `payload` tem grant de
+  `UPDATE` para `authenticated` (item acima), **um valor de `amount`/`due_date` divergente da linha
+  original passa pela RPC inteira sem erro**. Ao contrário do fornecedor (que não tem outra fonte
+  verificável — `resolve_or_create_supplier` já é a autoridade), `amount`/`due_date` do boleto **têm**
+  uma fonte independentemente verificável por DV: a própria linha, guardada em `idempotency_key`, essa
+  sim protegida.
+- **Precedente já existente para data sem componente de hora:** `nfe.ts:362` já serializa
+  `due_date: dueDate + 'T00:00:00Z'` para as parcelas de NF-e — meio-dia UTC explícito, não uma string
+  de data nua deixada para interpretação implícita de fuso. É o padrão que reaproveito abaixo, não um
+  padrão novo.
+
+**Pesquisa para QO-3 (registrada porque a QO-3 pediu declaradamente fonte, não memória):** usei
+`WebSearch`/`WebFetch` nesta sessão. Os PDFs primários da FEBRABAN/Santander/Banese vieram
+criptografados/comprimidos e minhas ferramentas não conseguiram extrair o texto (nem o `Read` local
+consegue renderizar PDF aqui — falta `pdftoppm`/poppler no ambiente). A fonte que **respondeu com
+tabela de posições explícita** foi `macoratti.net/boleto.htm` — referência técnica brasileira de longa
+data, citada de forma cruzada por várias outras páginas que apareceram nas mesmas buscas (a listagem
+de posições 001-044 do código de barras bateu, dígito a dígito, com uma segunda busca independente
+que sintetizou fórum DevMedia + referência a manual técnico HSBC + o texto da própria FEBRABAN antes
+de eu tentar o PDF). **Não fiquei só na leitura**: recalculei eu mesmo, por script, o exemplo do
+próprio macoratti ("fator 1000 = 03/07/2000") a partir da data-base 07/10/1997 e bateu exato — isso
+verifica a aritmética do fator de forma independente do texto, não só a citação. Por isso decido fechar
+a QO-3 aqui, com a fonte declarada e o cálculo próprio conferido; não escalo para o `@analyst` — mas
+deixo registrado que **nunca li o PDF primário da FEBRABAN diretamente** (só cheguei à referência dele
+por citação de terceiros), então se você quiser uma segunda camada de confirmação contra o PDF
+primário antes do `@dev` implementar, é uma verificação barata a mais, não uma correção do que decidi.
+
+### D12 — QO-1: documento sintético dentro do pipeline existente, não upload visível nem
+importação sem arquivo
+
+**Nenhuma das três opções literais do brief se sustenta sozinha** — decido uma variante que combina a
+primeira com uma técnica que o próprio schema já suporta:
+
+- **"Importação sem arquivo" está descartada por restrição de schema, não por preferência.**
+  `document_extraction_jobs.document_version_id` é `NOT NULL`; não dá pra criar job sem uma versão de
+  documento real gravada, e mudar isso é migration — fora do orçamento desta onda sem necessidade
+  técnica que justifique.
+- **Forçar upload visível de arquivo contraria o próprio motivo desta onda existir.** O ADR já registra
+  a variante do boleto como *"aceitar a linha digitável colada ou digitada pelo usuário... Entrega
+  boleto sem resolver PDF"* (seção "Extração de PDF", "Variante para boleto"). Pedir que o usuário
+  também anexe um arquivo, só para satisfazer uma FK, devolveria a fricção que essa rota existe para
+  eliminar.
+- **Decisão:** o cliente cria um **documento sintético** pelo mesmo caminho de upload já existente
+  (`documentService.ts`, mesmas tabelas `documents`/`document_versions`, mesmo bucket privado
+  versionado, mesma RLS) — um blob de texto puro contendo a linha canônica (QO-2 define a
+  canonicalização), sem nenhuma ação de "escolher arquivo" visível ao usuário. `documents.category =
+  'boleto'`. Uso o encaixe que o schema já oferece: `documents.source`, hoje sempre `'upload'` e sem
+  `CHECK` de enum, ganha o valor `'digitable_line'` para este caso — **convenção de aplicação, não
+  migration** — exatamente para não fingir que foi um upload de arquivo real quando não foi (mesmo
+  espírito de honestidade que `truncated` e `text_origin` já praticam no ADR).
+- **A criação do job/proposta é síncrona com o envio da linha, não um job "queued" esperando
+  processamento posterior.** O comentário já citado do schema (linha 34-41) já presumia isso para
+  boleto. Como a validação é aritmética pura (sem IA, sem I/O pesado, sem risco de CPU/timeout — D6 já
+  faz essa distinção para XML e ela vale ainda mais aqui), **não há motivo técnico para o estado
+  `queued`/`running` existir de fato no caminho feliz**: o job pode nascer e terminar como `done` na
+  mesma chamada que cria a proposta `pending`. Os valores de `status` já suportam isso
+  (`CHECK (status IN ('queued','running','failed','done'))`); não é preciso um valor novo.
+- **A decodificação roda no servidor, não só no cliente.** A `document-extraction` (ou uma ramificação
+  dela para `document_category = 'boleto'`) passa a receber `{ document_version_id, digitable_line }`
+  e faz ela mesma toda a validação de QO-3 (três DVs módulo 10, DV módulo 11, decodificação de
+  fator/valor) antes de gravar `payload.pending`. O cliente pode replicar a validação para feedback
+  instantâneo, mas **quem grava `payload.payable.amount`/`due_date` na proposta é o servidor**, nunca
+  um valor calculado só no cliente e aceito de bandeja — mesmo princípio de D2 já aplicado à rota XML,
+  e é o que fecha a Task 1 da story ("Confirmar as decisões das QOs... antes da implementação").
+
+**Consequência para quem implementa:** a `document-extraction` precisa de uma mudança de contrato
+(aceitar `digitable_line` no corpo, ramificar por categoria) — é **código de Edge Function, não DDL**,
+mas ainda é produção: `@dev` implementa, `@devops` publica com autorização (mesmo regime que os
+briefs `anchor-deploy-document-extraction`/`anchor-republicar-document-extraction` já usam para essa
+mesma função). Não é `@data-engineer` porque não toca schema.
+
+### D13 — QO-2: normalização é "só dígitos", contagem exata de 47, sem correção de caractere
+
+**Regra:** ao receber o texto colado/digitado, remover **tudo que não for `0-9`** (espaços, pontos,
+hífens, quebras de linha — os separadores visuais do formato impresso, ex. `AAABC.CCCCD EEEEE...`, são
+cosméticos, não dado). O resultado precisa ter **exatamente 47 caracteres**; qualquer contagem
+diferente é rejeição imediata, sem tentar completar ou truncar. **Não fazer correção heurística de
+caractere** (não trocar `O`→`0`, `l`→`1` etc.) — é exatamente o tipo de "conserto" implícito que
+produz um valor plausível e errado, e o item 4 do gate 1.57 (DATA-001/SEC-001) já mostrou que este
+projeto paga caro por confiar em dado não verificado; aqui o preço seria pior porque é dinheiro. A
+string resultante, só dígitos, **é** a chave canônica: vira `idempotency_key` (D8 do ADR já estabelece
+que a chave mora na proposta) sem transformação adicional.
+
+### D14 — QO-3: layout executável, fonte declarada, fixtures verificadas por round-trip
+
+**Fonte:** `macoratti.net/boleto.htm` (consulta via `WebFetch` em 2026-08-26), cruzada com síntese de
+múltiplas fontes independentes via `WebSearch` (fórum DevMedia, referência a manual técnico HSBC,
+texto oriundo da FEBRABAN) — ver "O que verifiquei" acima para o que fecha e o que fica em aberto
+(nunca li o PDF primário diretamente).
+
+**Código de barras — 44 posições, 1-indexed, inclusive:**
+
+| Posição | Tamanho | Campo |
+|---|---|---|
+| 1–3 | 3 | Banco |
+| 4 | 1 | Moeda (`9` = Real) |
+| 5 | 1 | DV geral (módulo 11) |
+| 6–9 | 4 | Fator de vencimento |
+| 10–19 | 10 | Valor (inteiro, 2 casas decimais implícitas — valor em centavos) |
+| 20–44 | 25 | Campo livre (definido por cada banco; conteúdo não afeta valor/vencimento) |
+
+**Linha digitável — 47 dígitos, montada a partir do código de barras:**
+
+| Campo | Tamanho | Conteúdo | Posições do código de barras |
+|---|---|---|---|
+| 1 | 10 (9 + DV) | Banco + Moeda + 5 primeiros dígitos do campo livre | 1–4, 20–24 |
+| 2 | 11 (10 + DV) | Dígitos 6–15 do campo livre | 25–34 |
+| 3 | 11 (10 + DV) | Dígitos 16–25 do campo livre | 35–44 |
+| 4 | 1 | DV geral do código de barras | 5 |
+| 5 | 14 | Fator (4) + Valor (10) | 6–19 |
+
+`10+11+11+1+14 = 47`.
+
+**Módulo 10 (DV dos campos 1, 2 e 3):** da direita para a esquerda, multiplicar cada dígito
+alternadamente por 2 e 1 (o dígito mais à direita recebe peso 2); quando o produto for maior que 9,
+somar os dois algarismos do produto (equivalente a subtrair 9); somar tudo; `DV = 0` se a soma terminar
+em `0`, senão `DV = 10 - (soma mod 10)`.
+
+**Módulo 11 (DV geral, posição 5 do código de barras):** tomar os 43 dígitos do código de barras **sem**
+a posição 5; da direita para a esquerda, multiplicar por pesos `2,3,4,5,6,7,8,9`, cíclico (volta a 2
+depois do 9); somar tudo; `resto = soma mod 11`. **Tratamento explícito dos casos de borda, pedido pelo
+brief:** se `resto ∈ {0, 1, 10}` → `DV = 1`; caso contrário, `DV = 11 - resto`. (As duas formulações que
+apareceram nas fontes — "se resto for 0, 1 ou 10, DV=1" e "se `11-resto` for 10 ou 11, DV=1" — são a
+mesma regra escrita de dois jeitos; conferi a equivalência para os 11 valores possíveis de resto antes
+de fechar.)
+
+**Fator de vencimento:** 4 dígitos, dias corridos desde a data-base `07/10/1997`. Confirmado por cálculo
+próprio contra o exemplo da fonte ("fator 1000 = 03/07/2000"): recalculei a diferença de dias entre
+07/10/1997 e 03/07/2000 e bateu 1000 exato. A virada `9999 → 1000` em 21/02/2025 → 22/02/2025 já está
+registrada neste ADR (seção "Boleto: a armadilha do fator de vencimento", comunicado FEBRABAN
+FB-009/2023) — não é fato novo desta pesquisa, só a ligação entre as duas partes: **era original**,
+`data = data-base + fator`; **era reiniciada**, `data = 22/02/2025 + (fator - 1000)`. Nenhuma fórmula
+serve para as duas eras — é por isso que a story exige dois fixtures, não um.
+
+**Valor:** 10 dígitos, inteiro, sem separador — são centavos. `valor_reais = digitos / 100`.
+Implementar como aritmética inteira sobre a string de centavos (dividir a string, não fazer conta de
+ponto flutuante em cima do número já convertido), para não herdar erro de arredondamento binário na
+casa decimal.
+
+**Fixtures — geradas e verificadas nesta sessão por script (Node), com verificação de ida E volta**
+(reconstruí o código de barras a partir da linha digitável gerada e recalculei os 4 DVs; os quatro
+bateram nas duas fixtures):
+
+*Fixture A — era original do fator (vencimento 10/12/2024, antes de 21/02/2025):*
+```
+linha digitável: 00190000090001234000605678901231599260000025000
+código de barras: 00195992600000250000000000012340000567890123
+banco: 001 (Banco do Brasil, só para ter um código real de 3 dígitos — o campo livre é ilustrativo,
+       não corresponde a nenhum boleto real)
+fator: 9926  →  vencimento esperado: 2024-12-10T00:00:00Z
+valor: 0000025000  →  valor esperado: R$ 250,00
+```
+
+*Fixture B — era reiniciada do fator (vencimento 15/03/2025, depois de 22/02/2025):*
+```
+linha digitável: 34190000090009876000212345678903110210000123456
+código de barras: 34191102100001234560000000098760001234567890
+banco: 341 (Itaú, mesmo motivo acima — ilustrativo)
+fator: 1021  →  vencimento esperado: 2025-03-15T00:00:00Z
+valor: 0000123456  →  valor esperado: R$ 1.234,56
+```
+
+Ambas passam nos três DVs de campo (módulo 10) e no DV geral (módulo 11); a reconstrução do código de
+barras a partir da linha digitável bate byte a byte com o código de barras original nas duas. Para
+fixtures negativas (AC2/AC3), `@dev` pode derivar mutando um único dígito de qualquer um dos dois
+campos acima e confirmando que a rejeição dispara — não preciso gerar uma fixture inválida separada
+para provar isso.
+
+### D15 — QO-4: valor e vencimento no payload
+
+- **Vencimento:** `payload.payable.due_date` é sempre `'YYYY-MM-DDT00:00:00Z'` — meia-noite UTC
+  explícita, mesmo padrão que `nfe.ts:362` já usa para parcelas de NF-e. Não é decisão nova, é
+  reaproveitar o que já existe. Isso fecha exatamente o risco que a QO-4 registrou (deslocamento
+  silencioso de um dia por fuso): uma string com hora e `Z` explícitos não deixa margem para o
+  `::TIMESTAMPTZ` do Postgres nem para o `Date` do cliente interpretarem em outro fuso.
+- **Valor:** `payload.payable.amount` é o número com exatamente 2 casas decimais derivado da divisão
+  inteira por 100 descrita em D14 — nunca um valor recalculado por conta própria em outro ponto do
+  código. `document_import_proposals.payload` não tem `CHECK` de casas decimais; a garantia vem de
+  onde o número é produzido (o parser determinístico), não de uma validação adicional no banco.
+
+### D16 — QO-8: a RPC não deve confiar em `payload.payable` sem revalidar — mesma lição do SEC-001,
+por um caminho mais direto
+
+**Decido que sim, a RPC precisa de defesa adicional — não é "não invente e pare", é achado concreto com
+linha de código.** `apply_boleto_payable_proposal` (linhas 586-590 e 597-598 da definição citada acima)
+usa `payload.payable.amount`/`due_date` direto, e `payload` tem `GRANT UPDATE` para `authenticated`
+(mesmo grant que sustenta o autosave da tela, inclusive o que QO-6 pode vir a usar). Ao contrário do
+fornecedor — que não tem outra fonte verificável e por isso `resolve_or_create_supplier` já é a
+autoridade final —, **`amount`/`due_date` do boleto têm uma fonte independentemente verificável por
+dígito verificador: a própria linha**, guardada em `idempotency_key`, que não tem grant para
+`authenticated`. Hoje nada compara as duas. Um `payload` editado depois da criação da proposta (por
+autosave legítimo, por um cliente adulterado, ou por qualquer chamada direta ao Postgrest com o grant
+que já existe) diverge de `idempotency_key` sem que a RPC perceba.
+
+**Isto usa o precedente do SEC-001 de um jeito mais direto, não só por analogia:** lá, a RPC confiava
+num id sem checar a empresa dele; aqui, a RPC confia num valor financeiro sem checá-lo contra a única
+fonte que o projeto já trata como verificável (a linha com DV). É o mesmo padrão de falha —
+"grant existe, então o servidor aceita o que chegou" — numa camada diferente.
+
+**Caminho de correção, duas formas possíveis, decisão de forma cabe à `@data-engineer`:**
+
+1. **Recalcular dentro da própria RPC**, em `plpgsql`, a partir de `idempotency_key` (que já é a linha
+   canônica, protegida, sempre presente) — os mesmos módulo 10/11/fator/valor de D14 — e usar o
+   resultado recalculado para o `INSERT`, ignorando `payload.payable.amount`/`due_date` como fonte de
+   verdade (eles passam a ser cache de exibição, mesmo papel que `current_cost` tinha antes de D11).
+   Custo: duplica a aritmética financeira em duas linguagens (TypeScript na Edge Function, SQL na
+   RPC), com o risco de as duas divergirem um dia se uma for corrigida e a outra não.
+2. **Guardar o resultado já decodificado pelo servidor numa coluna nova, sem grant para
+   `authenticated`** (paralelo a `idempotency_key`/`field_origins`), escrita uma vez pela
+   `document-extraction` no momento da criação da proposta; a RPC lê dali em vez de `payload.payable`.
+   Custo: migration de coluna + grant, mas **nenhuma duplicação de algoritmo** — uma implementação só,
+   a mesma que já existe na Edge Function.
+
+**Minha inclinação é a opção 2** — evita duas implementações do mesmo cálculo financeiro divergirem
+com o tempo, e este projeto já tem o hábito de coluna protegida por grant ausente (`current_cost`,
+`idempotency_key`, `field_origins`) — mas a forma exata (nome de coluna, se cabe na mesma migration da
+Edge Function ou em outra) é da `@data-engineer`, não minha. **As duas exigem migration com rollback e
+autorização explícita do usuário**, mesmo regime de NFR-2 e do mesmo padrão que SEC-001 já seguiu.
+
+**Efeito colateral direto sobre QO-6 (não é minha, mas preciso registrar — o brief pediu):** se D16
+for implementada em qualquer uma das duas formas, **editar `amount`/`due_date` na tela deixa de ter
+efeito sobre o que é gravado** — a RPC passa a usar o valor recalculado/protegido, não o que está em
+`payload`. Isso não é um detalhe de UX menor: se a Uma desenhar campos editáveis para valor/vencimento
+do boleto, a edição vira um formulário que mente sobre o que vai acontecer. Como esses dois campos
+são 100% decodificados por aritmética verificada por DV — diferente do fornecedor, que é dado humano
+sem checksum —, **não enxerguei motivo legítimo para eles serem editáveis** em primeiro lugar; a única
+razão para editar seria desconfiar da leitura da linha, e a resposta correta pra isso é colar de novo,
+não editar o resultado. Registro isso para o `@aiox-master` conciliar com a Uma — não decido QO-6 por
+ela.
+
+**Atualização (2026-08-26) — a conciliação já aconteceu e convergiu, não colidiu.** A
+`@ux-design-expert` (Uma) decidiu QO-6 como *display-only* por um argumento independente do meu:
+valor e vencimento saem de aritmética com dígito verificador conferido, não de IA com confiança
+probabilística — o vocabulário de confiança que justificaria um campo editável simplesmente não se
+aplica a um dado que já é matematicamente certo ou já foi rejeitado antes de virar proposta. Nenhuma
+das duas decisões dependeu da outra: eu cheguei a "não editável" olhando o grant/RPC (quem pode
+escrever e quem confia no quê); ela chegou ao mesmo lugar olhando proveniência/confiança de dado
+(D5). O efeito que eu registrei acima como "colateral" — se D16 for implementada, editar na tela
+deixa de ter efeito sobre o que é gravado — deixa de ser um efeito incômodo a avisar e vira reforço:
+as duas leituras, por caminhos diferentes, apontam para o mesmo desenho final. Isso aumenta minha
+confiança em D16, não muda o que ela propõe.
+
+### D17 — QO-9: `field_origins` ganha o valor `manual`
+
+**Não há `CHECK` de enum em `field_origins`** — é `JSONB` com só `jsonb_typeof(...) = 'object'`
+validado (`20260814100000_document_import_proposals.sql:69`). "`deterministic | model`" é convenção de
+aplicação, documentada no schema doc, não restrição de banco. **Decisão:** o vocabulário ganha um
+terceiro valor, `manual`, usado exatamente para os campos que a tela coleta por digitação direta do
+usuário (CNPJ/nome do fornecedor quando não há casamento automático). **Não fica de fora do mapa** —
+omitir a chave seria exatamente o "rotular por conveniência" às avessas que o brief pediu para evitar:
+o mapa de origem existe para o usuário confiar no que é dado dele e no que é extração; um campo sem
+entrada nenhuma no mapa é tão opaco quanto um campo rotulado errado. Zero migration — `field_origins`
+não tem grant separado do `payload` mesmo (nenhum dos dois é gravável por coluna própria, e nenhum
+precisa mudar de schema); é `@dev` quem passa a escrever `'manual'` nesses casos específicos, e quem
+atualiza a descrição do vocabulário em `docs/data/document-import-proposals-schema.md` como parte da
+implementação (não fiz essa edição aqui — não estava no escopo deste adendo).
+
+### Impacto nos ACs da Story 1.58 — para o `@sm` incorporar, não edito a story
+
+| Decisão | ACs que destrava | ACs que ganham exigência nova |
+|---|---|---|
+| D12 (QO-1) | AC1 (superfície de entrada definida) | AC5, Task 1/3: proposta nasce de chamada síncrona servidor-side; `documents.source='digitable_line'` |
+| D13 (QO-2) | AC1 (regra de normalização) | AC1: teste explícito de "só dígitos" e contagem ≠47 |
+| D14 (QO-3) | AC2, AC3, boa parte do AC4 | Task 2/6: as duas fixtures acima (ou equivalentes) viram os testes obrigatórios de R8 |
+| D15 (QO-4) | AC4 (formato de valor/vencimento) | AC5: payload sempre com `due_date` em `T00:00:00Z` |
+| D16 (QO-8) | — (nenhum AC destrava sozinho; é achado de segurança) | AC8/AC9 ganham dependência: enquanto a RPC não for corrigida, "confirmação pela RPC única" não fecha o risco que este adendo documentou; recomendo ao `@aiox-master`/`@po` registrar como item de acompanhamento do gate, no mesmo espírito do SEC-001 na 1.57 |
+| D17 (QO-9) | AC5, AC6 (origem dos dados manuais de fornecedor) | — |
+
+### QO-5, QO-6, QO-7 — não são minhas; consequência técnica registrada onde encontrei uma
+
+- **QO-5 (escopo bancário x arrecadação):** não decido — é do usuário. Consequência técnica que
+  encontrei e registro para você levar: `apply_boleto_payable_proposal` grava
+  `payment_method = 'bank_slip'` fixo (linha 600 da definição). Uma linha de arrecadação/concessionária
+  segue outro layout de código de barras (identificador de segmento na posição 2, não banco+moeda) —
+  se o escopo um dia incluir isso, não é a mesma RPC nem o mesmo parser; seria contrato novo, não
+  extensão do atual.
+- **QO-6 (campos editáveis):** decidida pela `@ux-design-expert` como *display-only*, por argumento
+  próprio dela — convergência com D16 registrada na atualização de 2026-08-26 ao final de D16 acima,
+  não decisão minha.
+- **QO-7 (duplicata x UNIQUE):** não toquei; D16 não interfere nela. Ver QO-10 abaixo — é outra
+  questão, sobre a mesma constraint, mas não é sobre duplicata forte, é sobre proposta morta
+  bloqueando reimportação legítima.
+
+### D18 — QO-10: a `UNIQUE (company_id, idempotency_key)` é incondicional, e isso é beco sem saída de
+produto, não duplicata
+
+**Achado da `@ux-design-expert` (Uma), que ninguém tinha visto até agora.** Ela fez certo em não
+decidir sozinha se a constraint deveria virar parcial — é decisão de arquitetura, e é minha.
+
+**Verifiquei a constraint real no banco antes de decidir, como pedido — o que a story documenta bate
+com o que está lá, mas eu não presumi isso.** Consulta somente-leitura em `qxcchymwswontqcwqogm`:
+
+```sql
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+WHERE conrelid = 'public.document_import_proposals'::regclass AND contype = 'u';
+-- document_import_proposals_company_id_idempotency_key_key | UNIQUE (company_id, idempotency_key)
+
+SELECT indexname, indexdef FROM pg_indexes
+WHERE schemaname='public' AND tablename='document_import_proposals';
+-- confirma: o único índice único é o btree (company_id, idempotency_key), SEM predicado WHERE.
+```
+
+Não há índice parcial escondido nem trigger compensando. **A constraint é exatamente o que a Uma leu
+na story e o que D8 do ADR descreve** — incondicional, qualquer `status`.
+
+**Confirmo a consequência que ela apontou, e ela é real: uma proposta `rejected` ou `expired` deixa a
+chave permanentemente ocupada.** `idempotency_key` não é liberada nem apagada quando a proposta morre
+— ela continua na linha, e a `UNIQUE (company_id, idempotency_key)` continua vendo essa linha morta
+como ocupante da chave para sempre. Reenviar a mesma NF-e (chave de acesso), o mesmo boleto (linha
+digitável) ou o mesmo contrato (`document_version_id`) depois de uma rejeição ou expiração bate na
+mesma constraint e falha com `23505`, que o handler já mapeia para uma mensagem de "duplicata" —
+**uma mensagem enganosa**, porque não há duplicata nenhuma: o documento nunca virou registro de
+domínio, e o usuário não tem como corrigir isso reenviando, porque reenviar é exatamente o que a
+constraint impede.
+
+**Isto não é boleto-específico — é bug estrutural de D8, já em produção desde a Story 1.55, afetando
+NF-e também.** `handler.ts:171-180` já captura `error.databaseCode === '23505'` e mapeia para
+`'duplicate_nfe'` — ou seja, o próprio caminho de NF-e já pode estar produzindo esse beco sem saída
+hoje, para qualquer nota rejeitada ou expirada. Não é escopo novo desta story, é achado que atravessa
+categorias; registro aqui porque foi aqui que apareceu, mas ele não fica contido na 1.58.
+
+**Correção: trocar a `UNIQUE` incondicional por um índice único parcial, escopado a `status IN
+('pending', 'applied')` — não `status = 'pending'` sozinho.**
+
+- **`pending` continua bloqueando** — é o caso original de D8 (duas propostas abertas para o mesmo
+  documento ao mesmo tempo).
+- **`applied` precisa continuar bloqueando também, e isto não é opcional:** é a única coisa que
+  impede reenviar a mesma NF-e/boleto/contrato **depois** de já ter virado compra/conta a
+  pagar/negócio real e criar um registro de domínio duplicado — exatamente o risco R3 que o ADR já
+  lista ("Importação duplicada... trava única por empresa"). Tirar `applied` do escopo do índice
+  reabriria R3; não é o que a Uma encontrou nem o que estou corrigindo.
+- **`rejected` e `expired` saem do escopo da unicidade** — são propostas mortas, nunca viraram
+  domínio, e sua chave devia estar livre para uma tentativa nova e legítima.
+
+```sql
+-- forma, não SQL a aplicar por mim — @data-engineer decide sintaxe exata e nome:
+-- DROP CONSTRAINT document_import_proposals_company_id_idempotency_key_key;
+-- CREATE UNIQUE INDEX ... ON document_import_proposals (company_id, idempotency_key)
+--   WHERE status IN ('pending', 'applied');
+```
+
+**Por que isto não deveria mexer no código do handler:** `handler.ts:171-180` já trata `23505` de
+forma reativa (tenta inserir, captura o erro, mapeia para mensagem) — não faz checagem prévia por
+`status`. Trocar a constraint por um índice parcial muda **quando** o `23505` dispara (só para colisão
+contra proposta viva ou aplicada), não **como** o app reage a ele. O `catch` continua funcionando sem
+alteração — é uma correção cirúrgica de banco, sem ondulação esperada em código cliente/Edge Function
+que eu tenha encontrado.
+
+**A quem cabe:** `@data-engineer` (Dara) — `DROP CONSTRAINT` + `CREATE UNIQUE INDEX` parcial, migration
+nova com rollback pareado (o rollback recria a constraint incondicional — reversível sem perda de
+dado, já que nenhuma linha existente deixa de satisfazer a constraint original ao reverter). **Exige
+autorização explícita do usuário**, mesmo regime de NFR-2. Não escrevo o SQL de aplicação; a forma
+exata acima é ilustrativa, não uma migration pronta.
+
+**Para o `@aiox-master` sequenciar:** como isto afeta o comportamento já em produção da 1.55-1.57 (não
+só a 1.58 ainda em Draft), talvez valha registrar como achado de acompanhamento sobre trabalho já
+`Done`, não só como pré-condição da 1.58 — a decisão de como tratar isso nas stories já fechadas não é
+minha; só nomeio o alcance para você não sequenciar como se fosse boleto-only.
+
+### Delegações deste adendo
+
+- **`@dev`:** implementa D12 (documento sintético + contrato novo da Edge Function), D13, D14, D15 e
+  D17. Nenhuma dessas cinco exige migration nem autorização do usuário — só D12 tem uma perna de
+  produção (publicação da Edge Function), que é do `@devops`.
+- **`@devops`:** publica a nova versão de `document-extraction` quando `@dev` terminar D12, com a
+  mesma autorização que as publicações anteriores dessa função já seguiram.
+- **`@data-engineer` (Dara):** decide a forma de D16 (recálculo em `plpgsql` x coluna nova protegida) e
+  escreve o índice parcial de D18 (QO-10); duas migrations com rollback pareado, podendo ser uma
+  leva só ou separadas — forma dela. Não aplica nenhuma das duas.
+- **`@aiox-master` (Orion):** concilia o efeito de D16 sobre QO-6 com a `@ux-design-expert` — já feito,
+  convergiu; leva ao usuário a autorização de migration de D16 e de D18 quando for sequenciá-las
+  (juntas ou separadas); decide se D16/D18 bloqueiam `Ready` da 1.58 ou viram item de acompanhamento,
+  e se D18 (que atravessa categorias) precisa de tratamento próprio nas Stories 1.55-1.57 já `Done`.

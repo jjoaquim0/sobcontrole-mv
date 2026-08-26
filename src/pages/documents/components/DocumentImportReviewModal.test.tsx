@@ -66,6 +66,12 @@ const createFlow = (): ReturnType<typeof useDocumentImport> => ({
   goToSummary: vi.fn(),
   backToReview: vi.fn(),
   confirm: vi.fn(),
+  items: [],
+  itemCount: 0,
+  saveItem: vi.fn(),
+  searchProducts: vi.fn(async () => []),
+  loadCategories: vi.fn(() => new Promise<never[]>(() => undefined)),
+  createCategory: vi.fn(),
 });
 
 describe('DocumentImportReviewModal', () => {
@@ -73,20 +79,19 @@ describe('DocumentImportReviewModal', () => {
     flow.current = createFlow();
   });
 
-  it('apresenta somente o escopo de cabeçalho, compra e contas a pagar', () => {
+  it('apresenta o escopo completo e mantém a revisão sem itens identificados', () => {
     render(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={document} />);
 
     expect(screen.getByRole('heading', { name: 'Revisar importação — Nota Fiscal' })).toBeInTheDocument();
     expect(screen.getByText('Proposta carregada para revisão.')).toHaveAttribute('aria-live', 'polite');
-    expect(screen.getByText('Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.')).toBeInTheDocument();
+    expect(screen.getByText('Não foi possível identificar itens nesta nota. Revise o restante dos dados — produtos podem ser lançados manualmente depois.')).toBeInTheDocument();
     expect(screen.getByLabelText('CNPJ')).toHaveValue('12.345.678/0001-90');
     expect(screen.getByLabelText('Valor final')).toHaveValue('100.00');
     expect(screen.getByRole('button', { name: 'Ver resumo e confirmar' })).toBeEnabled();
-    expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
-    expect(screen.queryByText('SKU')).not.toBeInTheDocument();
+    expect(screen.queryByText('Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.')).not.toBeInTheDocument();
   });
 
-  it('bloqueia confirmação quando há conflito de fornecedor e exibe aviso de estoque no sucesso', () => {
+  it('bloqueia confirmação quando há conflito e mostra resultado de aplicação', () => {
     const current = createFlow();
     current.supplierMatch = {
       status: 'conflict',
@@ -101,11 +106,21 @@ describe('DocumentImportReviewModal', () => {
 
     flow.current = { ...createFlow(), state: 'summary' as const };
     rerender(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={document} />);
-    expect(screen.getByText('Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.')).toBeInTheDocument();
+    expect(screen.getByText('Não foi possível identificar itens nesta nota. Eles poderão ser lançados manualmente depois.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Confirmar e gravar' })).toBeInTheDocument();
 
     flow.current = { ...current, state: 'success' as const };
     rerender(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={document} />);
-    expect(screen.getByText('Os produtos não foram adicionados ao estoque — lance-os manualmente.')).toBeInTheDocument();
+    expect(screen.getByText('Fornecedor, compra, itens, produtos e estoque foram aplicados pela confirmação.')).toBeInTheDocument();
+  });
+
+  it('mantém o cabeçalho confirmável acima do corte e mostra somente o aviso condicional de volume', () => {
+    flow.current = { ...createFlow(), itemCount: 61 };
+    render(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={document} />);
+
+    expect(screen.getByText('Esta nota tem 61 itens — acima dos 60 que revisamos automaticamente aqui. Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados ao estoque — lance-os manualmente.')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver resumo e confirmar' })).toBeEnabled();
   });
 });

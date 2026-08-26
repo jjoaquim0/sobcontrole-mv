@@ -5,13 +5,15 @@ import {
   ATOMIC_APPLY_ERROR_MESSAGE,
   createNfeProposalForm,
   getNfeProposalFormWithNotes,
+  isNfeProposalItemReady,
+  NFE_ITEM_REVIEW_LIMIT,
   NfeProposalFormValues,
   validateNfeProposalForm,
 } from '../../../services/documentImportService';
 import { useDocumentImport } from '../../../hooks/useDocumentImport';
+import { NfeItemReviewTable } from './NfeItemReviewTable';
 
-const CUTOFF_NOTICE = 'Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.';
-const MANUAL_STOCK_NOTICE = 'Os produtos não foram adicionados ao estoque — lance-os manualmente.';
+const VOLUME_NOTICE = (count: number): string => `Esta nota tem ${count} itens — acima dos ${NFE_ITEM_REVIEW_LIMIT} que revisamos automaticamente aqui. Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados ao estoque — lance-os manualmente.`;
 
 export interface DocumentImportReviewModalProps {
   isOpen: boolean;
@@ -82,13 +84,17 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
   const validation = useMemo(() => validateNfeProposalForm(form), [form]);
   const supplierMatch = importFlow.supplierMatch;
   const hasSupplierConflict = supplierMatch?.status === 'conflict';
+  const itemCount = importFlow.itemCount;
+  const isOverItemLimit = itemCount > NFE_ITEM_REVIEW_LIMIT;
+  const areItemsReady = isOverItemLimit || importFlow.items.every(isNfeProposalItemReady);
   const canConfirm = Boolean(
     importFlow.proposal?.status === 'pending' &&
     Object.keys(validation.errors).length === 0 &&
     !importFlow.isSupplierMatchLoading &&
     supplierMatch &&
     supplierMatch.status !== 'invalid' &&
-    !hasSupplierConflict,
+    !hasSupplierConflict &&
+    areItemsReady,
   );
 
   const updateForm = <K extends keyof NfeProposalFormValues>(field: K, value: NfeProposalFormValues[K]) => {
@@ -163,7 +169,9 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
             <div className="grid gap-5 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
               <DocumentImportContext document={document} />
               <div className="space-y-5">
-                <CutoffNotice />
+                {isOverItemLimit
+                  ? <VolumeNotice count={itemCount} />
+                  : <NfeItemReviewTable items={importFlow.items} onSaveItem={importFlow.saveItem} onSearchProducts={importFlow.searchProducts} loadCategories={importFlow.loadCategories} createCategory={importFlow.createCategory} />}
                 {importFlow.error && <ErrorMessage message={importFlow.error.message} />}
                 <form onSubmit={(event) => { event.preventDefault(); handleSummary(); }} noValidate className="space-y-5">
                   <section aria-labelledby="supplier-section-title" className="space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
@@ -207,11 +215,11 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
           )}
 
           {(importFlow.state === 'summary' || isConfirming) && summaryPayload && (
-            <SummaryState payload={summaryPayload} supplierLabel={supplierLabel} isConfirming={isConfirming} onBack={() => importFlow.backToReview()} onConfirm={handleConfirm} />
+            <SummaryState payload={summaryPayload} supplierLabel={supplierLabel} itemCount={itemCount} items={importFlow.items} isConfirming={isConfirming} onBack={() => importFlow.backToReview()} onConfirm={handleConfirm} />
           )}
 
-          {importFlow.state === 'success' && <SuccessState />}
-          {importFlow.state === 'error' && importFlow.proposal && <div className="space-y-4"><CutoffNotice /><ErrorMessage message={importFlow.error?.message || ATOMIC_APPLY_ERROR_MESSAGE} /><button type="button" onClick={() => importFlow.backToReview()} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar à revisão</button></div>}
+          {importFlow.state === 'success' && <SuccessState itemCount={itemCount} />}
+          {importFlow.state === 'error' && importFlow.proposal && <div className="space-y-4">{isOverItemLimit && <VolumeNotice count={itemCount} />}<ErrorMessage message={importFlow.error?.message || ATOMIC_APPLY_ERROR_MESSAGE} /><button type="button" onClick={() => importFlow.backToReview()} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar à revisão</button></div>}
         </div>
       </section>
     </div>
@@ -230,10 +238,10 @@ const ExtractionState: React.FC<{ state: ReturnType<typeof useDocumentImport>['s
 
 const DocumentImportContext: React.FC<{ document: Document }> = ({ document }) => <aside className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]"><h3 className="font-bold text-gray-900 dark:text-white">Documento original</h3><dl className="space-y-3 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Arquivo</dt><dd className="mt-1 break-words font-medium text-gray-800 dark:text-gray-200">{document.originalName || document.name}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Formato</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">XML · {document.mimeType}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Versão usada</dt><dd className="mt-1 break-all font-mono text-xs text-gray-700 dark:text-gray-300">{document.currentVersionId}</dd></div></dl><p className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">A revisão altera somente a proposta. O arquivo e a versão originais continuam preservados.</p></aside>;
 
-const CutoffNotice: React.FC = () => <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium leading-5 text-amber-900 dark:border-amber-400/20 dark:bg-amber-950/20 dark:text-amber-100">{CUTOFF_NOTICE}</p>;
+const VolumeNotice: React.FC<{ count: number }> = ({ count }) => <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium leading-5 text-amber-900 dark:border-amber-400/20 dark:bg-amber-950/20 dark:text-amber-100">{VOLUME_NOTICE(count)}</p>;
 
 const MoneyField: React.FC<{ id: string; label: string; value: string; error?: string; onChange: (value: string) => void }> = ({ id, label, value, error, onChange }) => <div><label htmlFor={`document-import-${id}`} className="block text-xs font-semibold text-gray-600 dark:text-gray-300">{label}</label><input id={`document-import-${id}`} type="text" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} aria-invalid={Boolean(error)} aria-describedby={error ? `document-import-${id}-error` : undefined} className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 dark:border-white/10 dark:bg-white/5 dark:text-white" />{error && <ErrorMessage id={`document-import-${id}-error`} message={error} />}</div>;
 
-const SummaryState: React.FC<{ payload: NonNullable<ReturnType<typeof validateNfeProposalForm>['payload']>; supplierLabel: string; isConfirming: boolean; onBack: () => void; onConfirm: () => void }> = ({ payload, supplierLabel, isConfirming, onBack, onConfirm }) => <div className="mx-auto max-w-2xl space-y-5"><CutoffNotice /><section className="rounded-2xl border border-gray-200 p-5 dark:border-white/10"><h3 className="text-xl font-bold text-gray-900 dark:text-white">Confirmar importação</h3><dl className="mt-5 grid gap-4 sm:grid-cols-2"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fornecedor</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.supplier.name}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">{supplierLabel}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Compra</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(payload.purchase.final_value)}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Pagamento: outro</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contas a pagar</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.purchase.installments.length} parcela(s)</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Total: {formatCurrency(payload.purchase.installments.reduce((total, installment) => total + installment.amount, 0))}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fora do piloto</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">Itens, produtos e estoque</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Nenhuma linha será criada para esses dados.</dd></div></dl></section><div className="flex flex-wrap justify-end gap-3"><button type="button" onClick={onBack} disabled={isConfirming} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar e revisar</button><button type="button" onClick={onConfirm} disabled={isConfirming} className="inline-flex items-center gap-2 rounded-xl bg-[#0B2551] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#12366f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50">{isConfirming && <Loader2 className="h-4 w-4 animate-spin" />}Confirmar e gravar</button></div></div>;
+const SummaryState: React.FC<{ payload: NonNullable<ReturnType<typeof validateNfeProposalForm>['payload']>; supplierLabel: string; itemCount: number; items: ReturnType<typeof useDocumentImport>['items']; isConfirming: boolean; onBack: () => void; onConfirm: () => void }> = ({ payload, supplierLabel, itemCount, items, isConfirming, onBack, onConfirm }) => <div className="mx-auto max-w-2xl space-y-5">{itemCount > NFE_ITEM_REVIEW_LIMIT ? <VolumeNotice count={itemCount} /> : <p className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm font-medium text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">{items.length > 0 ? `${items.length} item(ns) revisado(s); produtos e estoque serão atualizados na confirmação.` : 'Não foi possível identificar itens nesta nota. Eles poderão ser lançados manualmente depois.'}</p>}<section className="rounded-2xl border border-gray-200 p-5 dark:border-white/10"><h3 className="text-xl font-bold text-gray-900 dark:text-white">Confirmar importação</h3><dl className="mt-5 grid gap-4 sm:grid-cols-2"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fornecedor</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.supplier.name}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">{supplierLabel}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Compra</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(payload.purchase.final_value)}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Pagamento: outro</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contas a pagar</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.purchase.installments.length} parcela(s)</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Total: {formatCurrency(payload.purchase.installments.reduce((total, installment) => total + installment.amount, 0))}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens, produtos e estoque</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{itemCount > NFE_ITEM_REVIEW_LIMIT ? 'Acima do limite de revisão' : items.length > 0 ? 'Prontos para aplicação' : 'Sem itens identificados'}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">{itemCount > NFE_ITEM_REVIEW_LIMIT ? 'Os itens ficam para lançamento manual.' : 'A aplicação usa as decisões revisadas.'}</dd></div></dl></section><div className="flex flex-wrap justify-end gap-3"><button type="button" onClick={onBack} disabled={isConfirming} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar e revisar</button><button type="button" onClick={onConfirm} disabled={isConfirming} className="inline-flex items-center gap-2 rounded-xl bg-[#0B2551] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#12366f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50">{isConfirming && <Loader2 className="h-4 w-4 animate-spin" />}Confirmar e gravar</button></div></div>;
 
-const SuccessState: React.FC = () => <section className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-400/20 dark:bg-emerald-950/20"><CheckCircle2 className="h-9 w-9 text-emerald-600 dark:text-emerald-300" /><h3 className="text-xl font-bold text-emerald-950 dark:text-emerald-100">Importação concluída</h3><p className="text-sm leading-6 text-emerald-900 dark:text-emerald-100">{CUTOFF_NOTICE}</p><p className="text-sm font-semibold leading-6 text-emerald-900 dark:text-emerald-100">{MANUAL_STOCK_NOTICE}</p></section>;
+const SuccessState: React.FC<{ itemCount: number }> = ({ itemCount }) => <section className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-400/20 dark:bg-emerald-950/20"><CheckCircle2 className="h-9 w-9 text-emerald-600 dark:text-emerald-300" /><h3 className="text-xl font-bold text-emerald-950 dark:text-emerald-100">Importação concluída</h3>{itemCount > NFE_ITEM_REVIEW_LIMIT ? <VolumeNotice count={itemCount} /> : <p className="text-sm leading-6 text-emerald-900 dark:text-emerald-100">Fornecedor, compra, itens, produtos e estoque foram aplicados pela confirmação.</p>}</section>;

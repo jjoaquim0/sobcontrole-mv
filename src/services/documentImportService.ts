@@ -27,7 +27,122 @@ export interface NfeHeaderProposalPayload {
     notes: string;
     installments: NfeInstallment[];
   };
+  item_count?: number;
 }
+
+export interface NfeProposalItemPayload {
+  quantity: number;
+  document_unit_cost: number;
+  barcode?: string;
+  sku?: string;
+  new_product_name: string;
+  new_product_unit: string;
+  new_product_category_id?: string;
+  new_product_sale_price?: number;
+  source_unit_code?: string;
+}
+
+export interface NfeProductSuggestion {
+  id: string;
+  name: string;
+  barcode: string | null;
+  unit: string | null;
+  costPrice: number | null;
+  salePrice: number | null;
+  categoryId: string | null;
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface NfeImportProposalItem {
+  id: string;
+  proposalId: string;
+  companyId: string;
+  position: number;
+  payload: NfeProposalItemPayload;
+  fieldOrigins: Record<string, string>;
+  matchedProductId: string | null;
+  currentCost: number | null;
+  documentCost: number | null;
+  updateCostDecision: 'pending' | 'update' | 'keep';
+  suggestedProduct?: NfeProductSuggestion;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type NfeProposalItemReviewState =
+  | 'resolved'
+  | 'new_product_pending'
+  | 'new_product_ready'
+  | 'link_review'
+  | 'cost_divergence'
+  | 'link_and_cost_review';
+
+export const NFE_ITEM_REVIEW_LIMIT = 60;
+
+const PRODUCT_UNITS = ['Unidade', 'Kg', 'Litro', 'Caixa', 'Par', 'Metro'] as const;
+
+export const nfeProductUnits = PRODUCT_UNITS;
+
+const hasNewProductDetails = (payload: NfeProposalItemPayload): boolean =>
+  Boolean(
+    payload.new_product_category_id?.trim() &&
+    payload.new_product_name.trim() &&
+    payload.new_product_unit.trim() &&
+    typeof payload.new_product_sale_price === 'number' &&
+    Number.isFinite(payload.new_product_sale_price) &&
+    payload.new_product_sale_price > 0,
+  );
+
+const selectedProduct = (item: NfeImportProposalItem): NfeProductSuggestion | null => {
+  if (item.matchedProductId && item.suggestedProduct?.id === item.matchedProductId) return item.suggestedProduct;
+  if (!item.matchedProductId && item.suggestedProduct) return item.suggestedProduct;
+  if (item.matchedProductId) {
+    return {
+      id: item.matchedProductId,
+      name: 'Produto vinculado',
+      barcode: null,
+      unit: null,
+      costPrice: item.currentCost,
+      salePrice: null,
+      categoryId: null,
+      confidence: 'high',
+    };
+  }
+  return null;
+};
+
+const itemHasCostDivergence = (item: NfeImportProposalItem): boolean => {
+  const product = selectedProduct(item);
+  const currentCost = item.currentCost ?? product?.costPrice ?? null;
+  return currentCost !== null && item.documentCost !== null && Math.abs(currentCost - item.documentCost) > 0.0001;
+};
+
+export const getNfeProposalItemReviewState = (item: NfeImportProposalItem): NfeProposalItemReviewState => {
+  const product = selectedProduct(item);
+  if (!product) return hasNewProductDetails(item.payload) ? 'new_product_ready' : 'new_product_pending';
+
+  const needsCostDecision = itemHasCostDivergence(item) && item.updateCostDecision === 'pending';
+  const needsLinkDecision = !item.matchedProductId && product.confidence !== 'high';
+  if (needsLinkDecision && needsCostDecision) return 'link_and_cost_review';
+  if (needsLinkDecision) return 'link_review';
+  if (needsCostDecision) return 'cost_divergence';
+  return 'resolved';
+};
+
+export const isNfeProposalItemReady = (item: NfeImportProposalItem): boolean => {
+  const state = getNfeProposalItemReviewState(item);
+  return state === 'resolved' || state === 'new_product_ready';
+};
+
+export const getNfeProposalItemAttentionCount = (items: NfeImportProposalItem[]): number =>
+  items.filter((item) => !isNfeProposalItemReady(item)).length;
+
+export const getNfeProposalItemCounts = (items: NfeImportProposalItem[]) => ({
+  newProducts: items.filter((item) => ['new_product_pending', 'new_product_ready'].includes(getNfeProposalItemReviewState(item))).length,
+  pendingNewProducts: items.filter((item) => getNfeProposalItemReviewState(item) === 'new_product_pending').length,
+  linked: items.filter((item) => selectedProduct(item) !== null).length,
+  needsReview: items.filter((item) => ['link_review', 'cost_divergence', 'link_and_cost_review'].includes(getNfeProposalItemReviewState(item))).length,
+});
 
 export interface NfeProposalFormValues {
   supplierDocument: string;
@@ -131,6 +246,7 @@ const requireCompanyId = (): string => {
 
 const JOB_SELECT = 'id, company_id, document_version_id, document_category, status, error, created_at, updated_at, started_at, completed_at';
 const PROPOSAL_SELECT = 'id, job_id, company_id, document_category, status, payload, field_origins, text_origin, truncated, expires_at, applied_at, created_at, updated_at';
+const ITEM_SELECT = 'id, proposal_id, company_id, position, payload, field_origins, matched_product_id, current_cost, document_cost, update_cost_decision, created_at, updated_at';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -166,6 +282,43 @@ const mapProposal = (row: Record<string, unknown>): NfeImportProposal => {
     truncated: row.truncated === true,
     expiresAt: String(row.expires_at),
     appliedAt: asString(row.applied_at),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+  };
+};
+
+const mapItem = (row: Record<string, unknown>, suggestedProduct?: NfeProductSuggestion): NfeImportProposalItem => {
+  const rawPayload = isRecord(row.payload) ? row.payload : {};
+  const payload: NfeProposalItemPayload = {
+    quantity: Number(rawPayload.quantity ?? 0),
+    document_unit_cost: Number(rawPayload.document_unit_cost ?? row.document_cost ?? 0),
+    ...(typeof rawPayload.barcode === 'string' && rawPayload.barcode ? { barcode: rawPayload.barcode } : {}),
+    ...(typeof rawPayload.sku === 'string' && rawPayload.sku ? { sku: rawPayload.sku } : {}),
+    new_product_name: typeof rawPayload.new_product_name === 'string' ? rawPayload.new_product_name : '',
+    new_product_unit: typeof rawPayload.new_product_unit === 'string' ? rawPayload.new_product_unit : '',
+    ...(typeof rawPayload.new_product_category_id === 'string' && rawPayload.new_product_category_id ? { new_product_category_id: rawPayload.new_product_category_id } : {}),
+    ...(typeof rawPayload.new_product_sale_price === 'number' ? { new_product_sale_price: rawPayload.new_product_sale_price } : {}),
+    ...(typeof rawPayload.source_unit_code === 'string' && rawPayload.source_unit_code ? { source_unit_code: rawPayload.source_unit_code } : {}),
+  };
+  const origins = isRecord(row.field_origins)
+    ? Object.fromEntries(Object.entries(row.field_origins).map(([key, value]) => [key, String(value)]))
+    : {};
+  const decision = row.update_cost_decision === 'update' || row.update_cost_decision === 'keep'
+    ? row.update_cost_decision
+    : 'pending';
+
+  return {
+    id: String(row.id),
+    proposalId: String(row.proposal_id),
+    companyId: String(row.company_id),
+    position: Number(row.position),
+    payload,
+    fieldOrigins: origins,
+    matchedProductId: typeof row.matched_product_id === 'string' ? row.matched_product_id : null,
+    currentCost: row.current_cost === null || row.current_cost === undefined ? null : Number(row.current_cost),
+    documentCost: row.document_cost === null || row.document_cost === undefined ? null : Number(row.document_cost),
+    updateCostDecision: decision,
+    ...(suggestedProduct ? { suggestedProduct } : {}),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -303,6 +456,9 @@ const normalizeStoredPayload = (value: unknown, requireInstallments = false): Nf
   };
   result.payload.supplier = { ...result.payload.supplier, ...optionalSupplier };
   result.payload.purchase.notes = typeof purchase.notes === 'string' ? purchase.notes : '';
+  if (typeof value.item_count === 'number' && Number.isInteger(value.item_count) && value.item_count >= 0) {
+    result.payload.item_count = value.item_count;
+  }
   return result;
 };
 
@@ -313,7 +469,7 @@ const errorCodeFromValue = (value: unknown): DocumentImportErrorCode | null => {
   if (typeof value !== 'string') return null;
   if (value === 'nfe_saida_nao_suportada' || value === 'nfe_cnpj_suspeito' || value === 'duplicate_nfe' || value === 'document_not_found' || value === 'unauthorized') return value;
   if (value === 'nfe_access_key_invalid' || value.startsWith('nfe_access_key_')) return 'nfe_access_key_invalid';
-  if (value.startsWith('nfe_xml_') || value.startsWith('nfe_structure') || value.startsWith('nfe_version') || value.startsWith('nfe_model') || value.startsWith('nfe_required') || value.startsWith('nfe_money') || value.startsWith('nfe_installment') || value.startsWith('company_cnpj')) return 'nfe_xml_invalid';
+  if (value.startsWith('nfe_xml_') || value.startsWith('nfe_structure') || value.startsWith('nfe_version') || value.startsWith('nfe_model') || value.startsWith('nfe_required') || value.startsWith('nfe_money') || value.startsWith('nfe_item') || value.startsWith('nfe_installment') || value.startsWith('company_cnpj')) return 'nfe_xml_invalid';
   if (value === 'internal_error') return 'internal_error';
   return null;
 };
@@ -406,6 +562,180 @@ export const getNfeImportProposalByJobId = async (
   return data ? mapProposal(data as Record<string, unknown>) : null;
 };
 
+const mapProductSuggestion = (row: Record<string, unknown>, confidence: NfeProductSuggestion['confidence']): NfeProductSuggestion => ({
+  id: String(row.id),
+  name: String(row.name ?? ''),
+  barcode: typeof row.barcode === 'string' ? row.barcode : null,
+  unit: typeof row.unit === 'string' ? row.unit : null,
+  costPrice: row.cost_price === null || row.cost_price === undefined ? null : Number(row.cost_price),
+  salePrice: row.sale_price === null || row.sale_price === undefined ? null : Number(row.sale_price),
+  categoryId: typeof row.category_id === 'string' ? row.category_id : null,
+  confidence,
+});
+
+const loadNfeProductSuggestions = async (
+  items: NfeImportProposalItem[],
+  companyId: string,
+): Promise<Map<string, NfeProductSuggestion>> => {
+  const barcodes = Array.from(new Set(items.map((item) => item.payload.barcode).filter((value): value is string => Boolean(value))));
+  const matchedIds = Array.from(new Set(items.map((item) => item.matchedProductId).filter((value): value is string => Boolean(value))));
+  const rows: Record<string, unknown>[] = [];
+
+  if (barcodes.length > 0) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, barcode, unit, cost_price, sale_price, category_id')
+      .eq('company_id', companyId)
+      .in('barcode', barcodes);
+    if (error) throw error;
+    rows.push(...((data ?? []) as unknown as Record<string, unknown>[]));
+  }
+  if (matchedIds.length > 0) {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, barcode, unit, cost_price, sale_price, category_id')
+      .eq('company_id', companyId)
+      .in('id', matchedIds);
+    if (error) throw error;
+    rows.push(...((data ?? []) as unknown as Record<string, unknown>[]));
+  }
+
+  return new Map(rows.map((row) => [String(row.id), mapProductSuggestion(row, 'high')]));
+};
+
+export const getNfeProposalItems = async (proposalId: string): Promise<NfeImportProposalItem[]> => {
+  const companyId = requireCompanyId();
+  const { data, error } = await supabase
+    .from('document_import_proposal_items')
+    .select(ITEM_SELECT)
+    .eq('proposal_id', proposalId)
+    .eq('company_id', companyId)
+    .order('position', { ascending: true });
+  if (error) throw error;
+
+  const items = ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => mapItem(row));
+  const suggestionsById = await loadNfeProductSuggestions(items, companyId);
+  return items.map((item) => {
+    const suggestedProduct = item.matchedProductId
+      ? suggestionsById.get(item.matchedProductId)
+      : Array.from(suggestionsById.values()).find((candidate) => candidate.barcode === item.payload.barcode);
+    return suggestedProduct ? { ...item, suggestedProduct } : item;
+  });
+};
+
+const ITEM_PAYLOAD_KEYS = [
+  'quantity',
+  'document_unit_cost',
+  'barcode',
+  'sku',
+  'new_product_name',
+  'new_product_unit',
+  'new_product_category_id',
+  'new_product_sale_price',
+  'source_unit_code',
+] as const;
+
+const sanitizeNfeItemPayload = (payload: Partial<NfeProposalItemPayload>): Record<string, unknown> => {
+  const next: Record<string, unknown> = {};
+  for (const key of ITEM_PAYLOAD_KEYS) {
+    const value = payload[key];
+    if (value === undefined || value === '') continue;
+    if ((key === 'quantity' || key === 'document_unit_cost' || key === 'new_product_sale_price') &&
+      (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      throw new DocumentImportError('validation_error');
+    }
+    next[key] = value;
+  }
+  return next;
+};
+
+export interface NfeProposalItemPatch {
+  payload?: Partial<NfeProposalItemPayload>;
+  matchedProductId?: string | null;
+  currentCost?: number | null;
+  updateCostDecision?: 'pending' | 'update' | 'keep';
+  /** Sugestão mantida apenas no estado da revisão; nunca é persistida. */
+  suggestedProduct?: NfeProductSuggestion | null;
+}
+
+export const saveNfeProposalItem = async (
+  proposalId: string,
+  itemId: string,
+  patch: NfeProposalItemPatch,
+): Promise<NfeImportProposalItem> => {
+  const companyId = requireCompanyId();
+  const update: Record<string, unknown> = {};
+  if (patch.payload) update.payload = sanitizeNfeItemPayload(patch.payload);
+  if (patch.matchedProductId !== undefined) update.matched_product_id = patch.matchedProductId;
+  if (patch.currentCost !== undefined) {
+    if (patch.currentCost !== null && (!Number.isFinite(patch.currentCost) || patch.currentCost < 0)) {
+      throw new DocumentImportError('validation_error');
+    }
+    update.current_cost = patch.currentCost;
+  }
+  if (patch.updateCostDecision !== undefined) update.update_cost_decision = patch.updateCostDecision;
+  if (Object.keys(update).length === 0) throw new DocumentImportError('validation_error');
+
+  const { data, error } = await supabase
+    .from('document_import_proposal_items')
+    .update(update)
+    .eq('id', itemId)
+    .eq('proposal_id', proposalId)
+    .eq('company_id', companyId)
+    .select(ITEM_SELECT)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new DocumentImportError('document_not_found');
+  return mapItem(data as unknown as Record<string, unknown>);
+};
+
+export const searchNfeProducts = async (query: string): Promise<NfeProductSuggestion[]> => {
+  const companyId = requireCompanyId();
+  const term = query.trim();
+  if (!term) return [];
+  const { data, error } = await supabase
+    .from('products')
+    .select('id, name, barcode, unit, cost_price, sale_price, category_id')
+    .eq('company_id', companyId)
+    .ilike('name', `%${term}%`)
+    .limit(20);
+  if (error) throw error;
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => mapProductSuggestion(row, 'medium'));
+};
+
+export interface NfeProductCategoryOption {
+  id: string;
+  name: string;
+}
+
+export const getNfeProductCategories = async (): Promise<NfeProductCategoryOption[]> => {
+  const companyId = requireCompanyId();
+  const { data, error } = await supabase
+    .from('categories')
+    .select('id, name')
+    .eq('company_id', companyId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as unknown as Record<string, unknown>[]).map((row) => ({
+    id: String(row.id),
+    name: String(row.name ?? ''),
+  }));
+};
+
+export const createNfeProductCategory = async (name: string): Promise<NfeProductCategoryOption> => {
+  const companyId = requireCompanyId();
+  const normalizedName = name.trim();
+  if (!normalizedName) throw new DocumentImportError('validation_error');
+  const id = crypto.randomUUID();
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ id, company_id: companyId, name: normalizedName })
+    .select('id, name')
+    .single();
+  if (error) throw error;
+  return { id: String(data.id), name: String(data.name ?? normalizedName) };
+};
+
 export const saveNfeProposalPayload = async (
   proposalId: string,
   payload: NfeHeaderProposalPayload,
@@ -479,6 +809,7 @@ export const getNfeProposalFormWithNotes = (
   if (!result.payload) throw new DocumentImportError('validation_error');
   return {
     ...result.payload,
+    ...(payload.item_count !== undefined ? { item_count: payload.item_count } : {}),
     supplier: {
       ...result.payload.supplier,
       document: supplierDocument,

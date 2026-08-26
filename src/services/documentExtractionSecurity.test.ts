@@ -37,6 +37,11 @@ const VALID_XML =
   RECIPIENT +
   '</CNPJ></dest><total><ICMSTot><vProd>10.00</vProd><vNF>10.00</vNF></ICMSTot></total></infNFe></NFe>';
 
+const VALID_XML_WITH_ITEMS = VALID_XML.replace(
+  '</total></infNFe>',
+  '</total><det nItem="1"><prod><cProd>SKU-1</cProd><cEAN>7891234567890</cEAN><xProd>Produto 1</xProd><uCom>UN</uCom><qCom>2</qCom><vUnCom>4.50</vUnCom></prod></det><det nItem="2"><prod><cProd>SKU-2</cProd><cEAN>SEM GTIN</cEAN><xProd>Produto 2</xProd><uCom>KG</uCom><qCom>1.5</qCom><vUnCom>3.20</vUnCom></prod></det></infNFe>',
+);
+
 const createDocument = (
   overrides: Partial<AuthorizedDocumentVersion> = {},
 ): AuthorizedDocumentVersion => ({
@@ -169,11 +174,32 @@ describe('document-extraction handler security and persistence boundary', () => 
       idempotency_key: ACCESS_KEY,
       text_origin: null,
       truncated: false,
+      items: [],
     }));
     expect(deps.markJobDone).toHaveBeenCalledWith(JOB_ID, COMPANY_ID);
     expect(deps.markJobFailed).not.toHaveBeenCalled();
     expect(JSON.stringify((deps.logger as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(VALID_XML);
     expect(JSON.stringify((deps.logger as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(RECIPIENT);
+  });
+
+  it('persists deterministic items only after document authorization and preserves their order', async () => {
+    const { deps, tasks } = createDeps({
+      resolveDocument: vi.fn(async () => createDocument({ readXml: vi.fn(async () => VALID_XML_WITH_ITEMS) })),
+    });
+    const response = await createDocumentExtractionHandler(deps)(
+      createRequest({ document_version_id: VERSION_ID }),
+    );
+
+    expect(response.status).toBe(202);
+    await runBackgroundTask(tasks);
+    const persisted = (deps.createProposal as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(persisted.items).toHaveLength(2);
+    expect(persisted.items).toEqual([
+      expect.objectContaining({ position: 0, document_cost: 4.5, payload: expect.objectContaining({ quantity: 2, barcode: '7891234567890', new_product_unit: 'Unidade' }), matched_product_id: null, current_cost: null, update_cost_decision: 'pending' }),
+      expect.objectContaining({ position: 1, document_cost: 3.2, payload: expect.objectContaining({ quantity: 1.5, new_product_unit: 'Kg' }) }),
+    ]);
+    expect(persisted.items[0].field_origins).toEqual(expect.objectContaining({ quantity: 'deterministic', document_unit_cost: 'deterministic', new_product_name: 'deterministic' }));
+    expect(JSON.stringify((deps.logger as ReturnType<typeof vi.fn>).mock.calls)).not.toContain('ai-gateway');
   });
 
   it('rejects a document with a category outside the pilot', async () => {

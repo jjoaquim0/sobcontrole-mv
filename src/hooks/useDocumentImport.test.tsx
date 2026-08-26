@@ -7,7 +7,10 @@ const mocks = vi.hoisted(() => ({
   findLatest: vi.fn(),
   findSupplier: vi.fn(),
   getProposal: vi.fn(),
+  getItems: vi.fn(),
   save: vi.fn(),
+  saveItem: vi.fn(),
+  searchProducts: vi.fn(),
   start: vi.fn(),
   isEligible: vi.fn(() => true),
 }));
@@ -18,8 +21,11 @@ vi.mock('../services/documentImportService', () => ({
   findSupplierMatchByDocument: mocks.findSupplier,
   getDocumentImportErrorMessage: vi.fn(() => 'Erro seguro.'),
   getNfeImportProposalByJobId: mocks.getProposal,
+  getNfeProposalItems: mocks.getItems,
   isNfeDocumentImportEligible: mocks.isEligible,
   saveNfeProposalPayload: mocks.save,
+  saveNfeProposalItem: mocks.saveItem,
+  searchNfeProducts: mocks.searchProducts,
   startNfeDocumentExtraction: mocks.start,
   DocumentImportError: class DocumentImportError extends Error {
     code: string;
@@ -92,6 +98,7 @@ describe('useDocumentImport', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.isEligible.mockReturnValue(true);
+    mocks.getItems.mockResolvedValue([]);
     mocks.findSupplier.mockResolvedValue({ status: 'new', normalizedDocument: '12345678000190', supplier: null });
   });
 

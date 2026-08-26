@@ -147,12 +147,38 @@ const createDependencies = (): DocumentExtractionDependencies | null => {
       if (error) throw createPersistenceError(error.code);
     },
     createProposal: async (input) => {
-      const { error } = await serviceClient
+      const { items, ...proposalInput } = input;
+      const { data, error } = await serviceClient
         .from('document_import_proposals')
-        .insert(input)
+        .insert(proposalInput)
         .select('id')
         .single();
       if (error) throw createPersistenceError(error.code);
+      if (!data?.id) throw createPersistenceError();
+
+      if (items.length > 0) {
+        const { error: itemsError } = await serviceClient
+          .from('document_import_proposal_items')
+          .insert(items.map((item) => ({
+            proposal_id: data.id,
+            company_id: input.company_id,
+            position: item.position,
+            payload: item.payload,
+            field_origins: item.field_origins,
+            matched_product_id: item.matched_product_id,
+            current_cost: item.current_cost,
+            document_cost: item.document_cost,
+            update_cost_decision: item.update_cost_decision,
+          })));
+        if (itemsError) {
+          await serviceClient
+            .from('document_import_proposals')
+            .delete()
+            .eq('id', data.id)
+            .eq('company_id', input.company_id);
+          throw createPersistenceError(itemsError.code);
+        }
+      }
     },
     markJobDone: async (jobId, companyId) => {
       const { error } = await serviceClient

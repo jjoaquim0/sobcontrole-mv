@@ -38,6 +38,7 @@ export interface DocumentExtractionProposalInput {
   idempotency_key: string;
   payload: NfeHeaderProposalInput['payload'];
   field_origins: NfeHeaderProposalInput['field_origins'];
+  items: NfeHeaderProposalInput['items'];
   text_origin: null;
   truncated: false;
 }
@@ -107,6 +108,7 @@ const PUBLIC_MESSAGES: Record<HandlerErrorCode, string> = {
   nfe_access_key_invalid: 'A chave de acesso da NF-e e invalida.',
   nfe_access_key_company_mismatch: 'A chave de acesso nao corresponde ao emitente.',
   nfe_money_invalid: 'A NF-e possui valor monetario invalido.',
+  nfe_item_invalid: 'A NF-e possui item com quantidade, custo ou unidade invalida.',
   nfe_installment_invalid: 'A NF-e possui parcela ou vencimento invalido.',
   nfe_saida_nao_suportada: 'NF-e de saida nao e suportada nesta rota.',
   nfe_cnpj_suspeito: 'Os CNPJs da NF-e nao correspondem a uma entrada segura.',
@@ -205,6 +207,9 @@ const processDocument = async (
       field_origins: proposal.field_origins,
       text_origin: proposal.text_origin,
       truncated: proposal.truncated,
+      // Acima do corte a proposta mantém apenas o cabeçalho. O item_count no
+      // payload permite à revisão exibir o aviso sem criar/aplicar domínio.
+      items: proposal.items.length <= 60 ? proposal.items : [],
     });
     await deps.markJobDone(jobId, document.companyId);
   } catch (error) {

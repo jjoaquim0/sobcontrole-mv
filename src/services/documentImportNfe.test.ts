@@ -42,6 +42,7 @@ interface XmlOptions {
   duplicate?: string;
   duplicateAmount?: string;
   includeDetail?: boolean;
+  details?: string;
 }
 
 const createXml = (options: XmlOptions = {}): string => {
@@ -53,7 +54,7 @@ const createXml = (options: XmlOptions = {}): string => {
       '</dVenc><vDup>' + (options.duplicateAmount ?? '100.50') + '</vDup></dup></cobr>'
     : '';
   const detail = options.includeDetail
-    ? '<det nItem="1"><prod><cProd>SKU-1</cProd><xProd>Produto</xProd><qCom>1</qCom><vProd>999.99</vProd></prod></det>'
+    ? '<det nItem="1"><prod><cProd>SKU-1</cProd><cEAN>7891234567890</cEAN><xProd>Produto</xProd><uCom>UN</uCom><qCom>1</qCom><vUnCom>999.99</vUnCom><vProd>999.99</vProd></prod></det>'
     : '';
 
   return '<NFe xmlns="' + XML_NS + '"><infNFe versao="' +
@@ -70,7 +71,7 @@ const createXml = (options: XmlOptions = {}): string => {
     '</vFrete><vSeg>' + (options.vSeg ?? '2.00') +
     '</vSeg><vOutro>' + (options.vOutro ?? '3.00') +
     '</vOutro><vNF>' + (options.vNF ?? '1228.16') +
-    '</vNF></ICMSTot></total>' + duplicate + detail + '</infNFe></NFe>';
+    '</vNF></ICMSTot></total>' + duplicate + (options.details ?? detail) + '</infNFe></NFe>';
 };
 
 const createPrefixedProcXml = (): string => {
@@ -124,7 +125,31 @@ describe('extractNfeHeader', () => {
         notes: '',
         installments: [{ amount: 100.5, due_date: '2026-09-30T00:00:00Z' }],
       },
+      item_count: 1,
     });
+    expect(result.items).toEqual([expect.objectContaining({
+      position: 0,
+      payload: {
+        quantity: 1,
+        document_unit_cost: 999.99,
+        barcode: '7891234567890',
+        sku: 'SKU-1',
+        new_product_name: 'Produto',
+        new_product_unit: 'Unidade',
+      },
+      field_origins: {
+        quantity: 'deterministic',
+        document_unit_cost: 'deterministic',
+        barcode: 'deterministic',
+        sku: 'deterministic',
+        new_product_name: 'deterministic',
+        new_product_unit: 'deterministic',
+      },
+      matched_product_id: null,
+      current_cost: null,
+      document_cost: 999.99,
+      update_cost_decision: 'pending',
+    })]);
     expect(result.field_origins['supplier.document']).toBe('deterministic');
     expect(result.field_origins['purchase.installments[0].amount']).toBe('deterministic');
     expect(result.payload as unknown as Record<string, unknown>).not.toHaveProperty('det');
@@ -252,7 +277,7 @@ describe('extractNfeHeader', () => {
       'nfe_installment_invalid',
     ));
 
-  it('mapeia multiplas duplicatas sem tocar em det/prod', () => {
+  it('mapeia multiplas duplicatas e preserva os itens determinísticos', () => {
     const xml = createXml({ duplicate: '2026-09-30', includeDetail: true }).replace(
       '</cobr>',
       '<dup><nDup>002</nDup><dVenc>2026-10-30</dVenc><vDup>200.00</vDup></dup></cobr>',
@@ -263,6 +288,41 @@ describe('extractNfeHeader', () => {
       { amount: 100.5, due_date: '2026-09-30T00:00:00Z' },
       { amount: 200, due_date: '2026-10-30T00:00:00Z' },
     ]);
+    expect(result.items).toHaveLength(1);
+  });
+
+  it('extrai zero itens sem bloquear o cabeçalho', () => {
+    const result = extractNfeHeader(createXml(), RECIPIENT);
+    expect(result.items).toEqual([]);
+    expect(result.payload).not.toHaveProperty('item_count');
+  });
+
+  it('preserva a ordem de vários det e ignora cEAN ausente ou SEM GTIN', () => {
+    const details = [
+      '<det nItem="2"><prod><cProd>A-2</cProd><xProd>Segundo</xProd><uCom>KG</uCom><qCom>2.500</qCom><vUnCom>4.25</vUnCom><cEAN>SEM GTIN</cEAN></prod></det>',
+      '<det nItem="1"><prod><cProd>A-1</cProd><xProd>Primeiro</xProd><uCom>CX</uCom><qCom>3</qCom><vUnCom>10.00</vUnCom></prod></det>',
+    ].join('');
+    const result = extractNfeHeader(createXml({ details }), RECIPIENT);
+
+    expect(result.items.map((item) => [item.position, item.payload.new_product_name, item.payload.quantity])).toEqual([
+      [0, 'Segundo', 2.5],
+      [1, 'Primeiro', 3],
+    ]);
+    expect(result.items[0].payload).not.toHaveProperty('barcode');
+    expect(result.items[1].payload).not.toHaveProperty('barcode');
+    expect(result.items[0].payload.new_product_unit).toBe('Kg');
+    expect(result.items[1].payload.new_product_unit).toBe('Caixa');
+  });
+
+  it('marca unidade desconhecida e rejeita quantidade/custo inválidos', () => {
+    const unknownUnit = extractNfeHeader(createXml({
+      details: '<det><prod><cProd>A</cProd><xProd>Produto especial</xProd><uCom>PC</uCom><qCom>1</qCom><vUnCom>2.3456</vUnCom></prod></det>',
+    }), RECIPIENT);
+    expect(unknownUnit.items[0].payload).toMatchObject({ new_product_unit: 'Unidade', source_unit_code: 'PC' });
+    expect(unknownUnit.items[0].field_origins.source_unit_code).toBe('deterministic');
+
+    expectParserCode(createXml({ details: '<det><prod><cProd>A</cProd><xProd>Produto</xProd><uCom>UN</uCom><qCom>0</qCom><vUnCom>1</vUnCom></prod></det>' }), RECIPIENT, 'nfe_item_invalid');
+    expectParserCode(createXml({ details: '<det><prod><cProd>A</cProd><xProd>Produto</xProd><uCom>UN</uCom><qCom>1</qCom><vUnCom>abc</vUnCom></prod></det>' }), RECIPIENT, 'nfe_item_invalid');
   });
 
   it('usa defaults e lista vazia quando cobr nao existe', () => {

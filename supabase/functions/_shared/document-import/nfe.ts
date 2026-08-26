@@ -11,6 +11,7 @@ export type NfeParserErrorCode =
   | 'nfe_access_key_invalid'
   | 'nfe_access_key_company_mismatch'
   | 'nfe_money_invalid'
+  | 'nfe_item_invalid'
   | 'nfe_installment_invalid'
   | 'nfe_saida_nao_suportada'
   | 'nfe_cnpj_suspeito'
@@ -47,6 +48,27 @@ export interface NfeHeaderProposalPayload {
     notes: string;
     installments: NfeInstallment[];
   };
+  item_count?: number;
+}
+
+export interface NfeItemProposalPayload {
+  quantity: number;
+  document_unit_cost: number;
+  barcode?: string;
+  sku?: string;
+  new_product_name: string;
+  new_product_unit: string;
+  source_unit_code?: string;
+}
+
+export interface NfeItemProposalInput {
+  position: number;
+  payload: NfeItemProposalPayload;
+  field_origins: Record<string, 'deterministic'>;
+  matched_product_id: null;
+  current_cost: null;
+  document_cost: number;
+  update_cost_decision: 'pending';
 }
 
 export interface NfeHeaderProposalInput {
@@ -57,6 +79,7 @@ export interface NfeHeaderProposalInput {
   truncated: false;
   payload: NfeHeaderProposalPayload;
   field_origins: Record<string, 'deterministic'>;
+  items: NfeItemProposalInput[];
 }
 
 const MAX_XML_BYTES = 500 * 1024;
@@ -121,6 +144,44 @@ const optionalMoney = (element: Element, name: string): { cents: bigint; value: 
   if (!node) return { cents: 0n, value: 0 };
   const cents = parseMoneyCents(valueOf(node));
   return { cents, value: moneyFromCents(cents) };
+};
+
+const DECIMAL_PATTERN = /^(?:0|[1-9]\d*)(?:\.\d{1,10})?$/;
+
+const parseItemDecimal = (value: string, allowZero: boolean): number => {
+  const normalized = value.trim();
+  if (!DECIMAL_PATTERN.test(normalized)) throw new NfeParserError('nfe_item_invalid');
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || (!allowZero && parsed <= 0) || (allowZero && parsed < 0)) {
+    throw new NfeParserError('nfe_item_invalid');
+  }
+  return parsed;
+};
+
+const normalizeBarcode = (value: string): string | undefined => {
+  const normalized = value.trim();
+  if (!normalized || /^sem\s+gtin$/i.test(normalized)) return undefined;
+  return /^\d{8,14}$/.test(normalized) ? normalized : undefined;
+};
+
+const PRODUCT_UNIT_MAP: Record<string, string> = {
+  UN: 'Unidade',
+  UND: 'Unidade',
+  KG: 'Kg',
+  KGM: 'Kg',
+  L: 'Litro',
+  LT: 'Litro',
+  CX: 'Caixa',
+  PR: 'Par',
+  M: 'Metro',
+  MT: 'Metro',
+};
+
+const normalizeProductUnit = (value: string): { unit: string; source?: string } => {
+  const source = value.trim().toUpperCase();
+  if (!source) throw new NfeParserError('nfe_item_invalid');
+  const unit = PRODUCT_UNIT_MAP[source];
+  return unit ? { unit } : { unit: 'Unidade', source };
 };
 
 const parseDueDate = (value: string): string => {
@@ -312,6 +373,46 @@ export const extractNfeHeader = (xml: string, companyCnpj: string): NfeHeaderPro
     ...(phone ? { phone } : {}),
   };
 
+  const itemInputs: NfeItemProposalInput[] = [];
+  for (const [position, det] of directChildren(infNfe, 'det').entries()) {
+    const prod = child(det, 'prod');
+    if (!prod) throw new NfeParserError('nfe_item_invalid');
+
+    const quantity = parseItemDecimal(requiredChildValue(prod, 'qCom'), false);
+    const documentUnitCost = parseItemDecimal(requiredChildValue(prod, 'vUnCom'), true);
+    const name = requiredChildValue(prod, 'xProd');
+    const unit = normalizeProductUnit(requiredChildValue(prod, 'uCom'));
+    const barcode = normalizeBarcode(valueOf(child(prod, 'cEAN')));
+    const sku = valueOf(child(prod, 'cProd'));
+    const payload: NfeItemProposalPayload = {
+      quantity,
+      document_unit_cost: documentUnitCost,
+      ...(barcode ? { barcode } : {}),
+      ...(sku ? { sku } : {}),
+      new_product_name: name,
+      new_product_unit: unit.unit,
+      ...(unit.source ? { source_unit_code: unit.source } : {}),
+    };
+    const fieldOrigins: Record<string, 'deterministic'> = {
+      quantity: 'deterministic',
+      document_unit_cost: 'deterministic',
+      new_product_name: 'deterministic',
+      new_product_unit: 'deterministic',
+      ...(barcode ? { barcode: 'deterministic' as const } : {}),
+      ...(sku ? { sku: 'deterministic' as const } : {}),
+      ...(unit.source ? { source_unit_code: 'deterministic' as const } : {}),
+    };
+    itemInputs.push({
+      position,
+      payload,
+      field_origins: fieldOrigins,
+      matched_product_id: null,
+      current_cost: null,
+      document_cost: documentUnitCost,
+      update_cost_decision: 'pending',
+    });
+  }
+
   return {
     document_category: 'nota_fiscal',
     status: 'pending',
@@ -329,7 +430,9 @@ export const extractNfeHeader = (xml: string, companyCnpj: string): NfeHeaderPro
         notes: '',
         installments,
       },
+      ...(itemInputs.length ? { item_count: itemInputs.length } : {}),
     },
     field_origins: publicFieldOrigins(Boolean(email), Boolean(phone), installments.length),
+    items: itemInputs,
   };
 };

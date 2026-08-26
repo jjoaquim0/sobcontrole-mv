@@ -11,10 +11,18 @@ import {
   getNfeImportProposalByJobId,
   isNfeDocumentImportEligible,
   NfeHeaderProposalPayload,
+  NfeImportProposalItem,
+  NfeProposalItemPatch,
   NfeImportProposal,
   startNfeDocumentExtraction,
   SupplierMatchResult,
   saveNfeProposalPayload,
+  getNfeProposalItems,
+  saveNfeProposalItem,
+  searchNfeProducts,
+  NfeProductSuggestion,
+  getNfeProductCategories,
+  createNfeProductCategory,
 } from '../services/documentImportService';
 
 export type DocumentImportViewState =
@@ -39,6 +47,7 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
   const [state, setState] = useState<DocumentImportViewState>('idle');
   const [job, setJob] = useState<DocumentExtractionJob | null>(null);
   const [proposal, setProposal] = useState<NfeImportProposal | null>(null);
+  const [items, setItems] = useState<NfeImportProposalItem[]>([]);
   const [supplierMatch, setSupplierMatch] = useState<SupplierMatchResult | null>(null);
   const [isSupplierMatchLoading, setIsSupplierMatchLoading] = useState(false);
   const [error, setError] = useState<DocumentImportError | null>(null);
@@ -80,6 +89,9 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
       setState('error');
       return;
     }
+    const nextItems = await getNfeProposalItems(nextProposal.id);
+    if (generation !== generationRef.current) return;
+    setItems(nextItems);
     setError(null);
     setState('review');
     await refreshSupplierMatch(nextProposal.payload.supplier.document);
@@ -136,6 +148,7 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
     setState('idle');
     setJob(null);
     setProposal(null);
+    setItems([]);
     setSupplierMatch(null);
     setError(null);
   }, [document?.id, versionId]);
@@ -205,11 +218,26 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
     }
   }, [proposal]);
 
+  const saveItem = useCallback(async (itemId: string, patch: NfeProposalItemPatch): Promise<NfeImportProposalItem> => {
+    if (!proposal || proposal.status !== 'pending') throw new DocumentImportError('document_not_found');
+    const saved = await saveNfeProposalItem(proposal.id, itemId, patch);
+    setItems((current) => current.map((item) => item.id === itemId
+      ? { ...saved, suggestedProduct: patch.suggestedProduct === undefined ? item.suggestedProduct : (patch.suggestedProduct ?? undefined) }
+      : item));
+    return { ...saved, suggestedProduct: patch.suggestedProduct === undefined ? items.find((item) => item.id === itemId)?.suggestedProduct : (patch.suggestedProduct ?? undefined) };
+  }, [items, proposal]);
+
+  const searchProducts = useCallback(async (query: string): Promise<NfeProductSuggestion[]> => searchNfeProducts(query), []);
+  const loadCategories = useCallback(() => getNfeProductCategories(), []);
+  const createCategory = useCallback((name: string) => createNfeProductCategory(name), []);
+
   return {
     eligible,
     state,
     job,
     proposal,
+    items,
+    itemCount: proposal?.payload.item_count ?? items.length,
     supplierMatch,
     isSupplierMatchLoading,
     error,
@@ -221,5 +249,9 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
     goToSummary,
     backToReview,
     confirm,
+    saveItem,
+    searchProducts,
+    loadCategories,
+    createCategory,
   };
 };

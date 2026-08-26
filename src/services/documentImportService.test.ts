@@ -11,8 +11,9 @@ const mocks = vi.hoisted(() => {
   const queries = new Map<string, Record<string, ReturnType<typeof vi.fn>>>();
   const makeQuery = (table: string) => {
     const query: Record<string, ReturnType<typeof vi.fn>> = {};
-    for (const method of ['select', 'eq', 'order', 'limit', 'update']) query[method] = vi.fn(() => query) as unknown as ReturnType<typeof vi.fn>;
+    for (const method of ['select', 'eq', 'order', 'limit', 'update', 'in', 'ilike', 'insert', 'delete']) query[method] = vi.fn(() => query) as unknown as ReturnType<typeof vi.fn>;
     query.maybeSingle = vi.fn(() => Promise.resolve(results.get(table) || { data: null, error: null })) as unknown as ReturnType<typeof vi.fn>;
+    query.single = vi.fn(() => Promise.resolve(results.get(table) || { data: null, error: null })) as unknown as ReturnType<typeof vi.fn>;
     query.then = vi.fn((resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => Promise.resolve(results.get(table) || { data: [], error: null }).then(resolve, reject)) as unknown as ReturnType<typeof vi.fn>;
     queries.set(table, query);
     return query;
@@ -40,9 +41,15 @@ import {
   ATOMIC_APPLY_ERROR_MESSAGE,
   createNfeProposalForm,
   findSupplierMatchByDocument,
+  createNfeProductCategory,
+  getNfeProductCategories,
+  getNfeProposalItems,
   getDocumentImportErrorMessage,
   isNfeDocumentImportEligible,
   moneyToCents,
+  getNfeProposalItemReviewState,
+  isNfeProposalItemReady,
+  saveNfeProposalItem,
   saveNfeProposalPayload,
   startNfeDocumentExtraction,
   validateNfeProposalForm,
@@ -72,6 +79,28 @@ const proposalRow = (overrides: Record<string, unknown> = {}) => ({
   truncated: false,
   expires_at: '2026-09-08T00:00:00Z',
   applied_at: null,
+  created_at: '2026-08-24T12:00:00Z',
+  updated_at: '2026-08-24T12:00:00Z',
+  ...overrides,
+});
+
+const itemRow = (overrides: Record<string, unknown> = {}) => ({
+  id: 'item-1',
+  proposal_id: PROPOSAL_ID,
+  company_id: COMPANY_ID,
+  position: 0,
+  payload: {
+    quantity: 2,
+    document_unit_cost: 4.5,
+    barcode: '7891234567890',
+    new_product_name: 'Produto XML',
+    new_product_unit: 'Unidade',
+  },
+  field_origins: { quantity: 'deterministic', new_product_name: 'deterministic' },
+  matched_product_id: null,
+  current_cost: null,
+  document_cost: 4.5,
+  update_cost_decision: 'pending',
   created_at: '2026-08-24T12:00:00Z',
   updated_at: '2026-08-24T12:00:00Z',
   ...overrides,
@@ -164,6 +193,63 @@ describe('documentImportService — contratos de extração e validação', () =
     expect(query?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
     expect(query?.eq).toHaveBeenCalledWith('status', 'pending');
     expect((query?.update.mock.calls[0][0] as { payload: Record<string, unknown> }).payload).not.toHaveProperty('items');
+  });
+
+  it('carrega itens em ordem, com tenant da sessão e sugestão de produto por barcode', async () => {
+    mocks.results.set('document_import_proposal_items', { data: [itemRow()], error: null });
+    mocks.results.set('products', {
+      data: [{ id: 'product-1', name: 'Produto existente', barcode: '7891234567890', unit: 'Unidade', cost_price: 4, sale_price: 8, category_id: 'category-1' }],
+      error: null,
+    });
+
+    const items = await getNfeProposalItems(PROPOSAL_ID);
+
+    expect(items[0]).toMatchObject({ id: 'item-1', position: 0, matchedProductId: null, documentCost: 4.5, suggestedProduct: { id: 'product-1', confidence: 'high' } });
+    expect(mocks.queries.get('document_import_proposal_items')?.eq).toHaveBeenCalledWith('proposal_id', PROPOSAL_ID);
+    expect(mocks.queries.get('document_import_proposal_items')?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
+    expect(mocks.queries.get('document_import_proposal_items')?.order).toHaveBeenCalledWith('position', { ascending: true });
+    expect(mocks.queries.get('products')?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
+  });
+
+  it('autosalva somente payload e decisões permitidos, sempre limitado ao item, proposta e tenant', async () => {
+    mocks.results.set('document_import_proposal_items', { data: itemRow(), error: null });
+
+    await saveNfeProposalItem(PROPOSAL_ID, 'item-1', {
+      payload: { ...itemRow().payload as Record<string, unknown>, new_product_category_id: 'category-1', new_product_sale_price: 9 },
+      matchedProductId: null,
+      currentCost: null,
+      updateCostDecision: 'keep',
+      suggestedProduct: null,
+    });
+
+    const query = mocks.queries.get('document_import_proposal_items');
+    expect(query?.update).toHaveBeenCalledWith({ payload: expect.objectContaining({ new_product_category_id: 'category-1', new_product_sale_price: 9 }), matched_product_id: null, current_cost: null, update_cost_decision: 'keep' });
+    expect(query?.eq).toHaveBeenCalledWith('id', 'item-1');
+    expect(query?.eq).toHaveBeenCalledWith('proposal_id', PROPOSAL_ID);
+    expect(query?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
+    expect((query?.update.mock.calls[0][0] as Record<string, unknown>)).not.toHaveProperty('suggestedProduct');
+  });
+
+  it('mantém estados seguros: produto novo exige quatro campos e divergência não recebe decisão automática', () => {
+    const item = {
+      id: 'item-1', proposalId: PROPOSAL_ID, companyId: COMPANY_ID, position: 0,
+      payload: { quantity: 1, document_unit_cost: 4, new_product_name: 'Novo', new_product_unit: 'Kg' },
+      fieldOrigins: {}, matchedProductId: null, currentCost: null, documentCost: 4, updateCostDecision: 'pending' as const,
+      createdAt: '', updatedAt: '',
+    };
+    expect(getNfeProposalItemReviewState(item)).toBe('new_product_pending');
+    expect(isNfeProposalItemReady(item)).toBe(false);
+    expect(getNfeProposalItemReviewState({ ...item, matchedProductId: 'product-1', currentCost: 2 })).toBe('cost_divergence');
+  });
+
+  it('carrega e cria categorias apenas no tenant atual', async () => {
+    mocks.results.set('categories', { data: [{ id: 'category-1', name: 'Bebidas' }], error: null });
+    await expect(getNfeProductCategories()).resolves.toEqual([{ id: 'category-1', name: 'Bebidas' }]);
+    expect(mocks.queries.get('categories')?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
+
+    mocks.results.set('categories', { data: { id: 'category-2', name: 'Higiene' }, error: null });
+    await expect(createNfeProductCategory('Higiene')).resolves.toEqual({ id: 'category-2', name: 'Higiene' });
+    expect(mocks.queries.get('categories')?.insert).toHaveBeenCalledWith(expect.objectContaining({ company_id: COMPANY_ID, name: 'Higiene' }));
   });
 
   it('não salva proposta sem parcela e não consulta nem escreve itens', async () => {

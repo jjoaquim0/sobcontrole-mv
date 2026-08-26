@@ -1,0 +1,158 @@
+schema: 1
+story: "1.57"
+gate: FAIL
+status_reason: "Falha de alta severidade no contrato de persistência dos itens: a UI envia current_cost ao selecionar produto ou escolher criar novo, mas o papel authenticated não possui UPDATE nessa coluna. O fluxo fica impedido em decisões essenciais. A pré-condição do AC8 foi satisfeita, porém não é seguro executar a aplicação real da proposta em produção; atomicidade, idempotência, incremento positivo e rollback permanecem sem prova E2E autorizada."
+reviewer: "Quinn"
+updated: "2026-08-25"
+
+preconditions:
+  result: PASS
+  verified_at: "2026-08-25"
+  executed_by:
+    migration_reconciliation: "@data-engineer"
+    d10_application: "@data-engineer"
+    edge_function_republish: "@devops"
+  evidence:
+    - "Supabase list_migrations confirmou 20260814100000 document_import_proposals e 20260825140000 nfe_purchase_apply_stock_increment; 20260822182249 não está mais presente e 20260814101500 não foi aplicada."
+    - "pg_get_functiondef confirmou public.apply_nfe_purchase_proposal como SECURITY INVOKER; consulta read-only encontrou exatamente uma atribuição SET current_quantity = current_quantity + v_item_quantity e exatamente uma instrução UPDATE de estoque."
+    - "Supabase list/get_edge_function confirmou document-extraction ACTIVE, version 2, verify_jwt true, hash d68f58a84b125e23cd29872f46629bf65a14b9cddc099626be15c19e4dc954be; o conteúdo remoto contém o parser det/prod, a persistência de items e a compensação documentada."
+    - "Contagens read-only atuais: products=2, purchases=3, purchase_items=3, suppliers=2, account_payables=3."
+  limitation: "O banco é produção com dados reais. Nenhuma proposta foi aplicada e nenhum cenário foi criado, alterado ou limpo durante este gate; a identidade dos executores é a do registro operacional informado, enquanto o estado resultante foi verificado independentemente por @qa."
+
+baseline:
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas: 276 erros e 2 warnings; diagnósticos preexistentes fora dos caminhos da Story."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "24 diagnósticos TypeScript preexistentes, sem EPERM de .tsbuildinfo e fora dos arquivos da Story."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "66 arquivos e 586 testes aprovados; 0 falhas."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "PASS; 3005 módulos transformados; warning informativo de chunk acima de 500 kB."
+
+final:
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas: 276 erros e 2 warnings; sem piora em relação ao baseline."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "Os mesmos 24 diagnósticos preexistentes, exit 2, sem EPERM de .tsbuildinfo e sem piora."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "66 arquivos e 586 testes aprovados; 0 falhas."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "PASS; 3005 módulos transformados; mesmo warning informativo de chunk acima de 500 kB."
+
+focused:
+  lint:
+    command: "npx eslint src/hooks/useDocumentImport.test.tsx src/hooks/useDocumentImport.ts src/pages/documents/components/DocumentImportReviewModal.test.tsx src/pages/documents/components/DocumentImportReviewModal.tsx src/pages/documents/components/NfeItemReviewTable.test.tsx src/pages/documents/components/NfeItemReviewTable.tsx src/services/documentExtractionSecurity.test.ts src/services/documentImportNfe.test.ts src/services/documentImportService.test.ts src/services/documentImportService.ts supabase/functions/_shared/document-import/handler.ts supabase/functions/_shared/document-import/nfe.ts supabase/functions/document-extraction/index.ts --report-unused-disable-directives --max-warnings 0"
+    exit_code: 0
+    result: "0 erros e 0 warnings."
+  tests:
+    command: "npx vitest run src/services/documentImportNfe.test.ts src/services/documentExtractionSecurity.test.ts src/services/documentImportService.test.ts src/hooks/useDocumentImport.test.tsx src/pages/documents/components/DocumentImportReviewModal.test.tsx src/pages/documents/components/NfeItemReviewTable.test.tsx"
+    exit_code: 0
+    result: "6 arquivos e 73 testes aprovados."
+  remote_edge_function:
+    operation: "Supabase list_edge_functions/get_edge_function, somente leitura"
+    result: "document-extraction ACTIVE, version 2, verify_jwt true; conteúdo remoto inclui os três arquivos novos/alterados do fluxo."
+  remote_database:
+    operation: "Supabase list_migrations/execute_sql, somente leitura"
+    result: "D10 aplicada; função invoker com um UPDATE de current_quantity; grants/RLS e contagens de domínio inspecionados."
+  coderabbit: "Não executado: não autorizado; enviaria o código para serviço externo."
+  production_writes: "Nenhuma escrita executada; nenhuma migration, DDL/DML, RPC de aplicação, deploy ou cenário de teste foi disparado por @qa."
+
+scope_audit:
+  result: PASS
+  evidence:
+    - "Commit 71ca5a6 contém exatamente 14 arquivos e 1173 inserções/65 remoções, limitados à Story 1.57, parser/handler, serviço/hook/UI e testes correspondentes."
+    - "O commit não contém .claude/launch.json, vite.config.ts, .claude/settings.local.json.bak, src/services/purchaseService.ts, a migration D10 ou o rollback D10."
+    - "As alterações atuais alheias em .claude/launch.json, vite.config.ts, .claude/settings.local.json.bak e briefs não foram tocadas."
+    - "Stories 1.55 e 1.56 permanecem Done e não foram alteradas; a Story 1.56 não foi editada para acomodar a superação do AC9."
+    - "A busca nos caminhos do commit encontrou somente a chamada RPC de aplicação como escrita de domínio no cliente; não há escrita client-side paralela de products, purchase_items, purchases, account_payables ou current_quantity."
+
+acceptance_criteria:
+  AC1:
+    result: PASS
+    evidence: "extractNfeHeader extrai det/prod em ordem, mapeia qCom/vUnCom/cEAN/xProd/uCom, mantém field_origins deterministic e preserva o cabeçalho; os testes cobrem zero, um, múltiplos itens, namespaces, barcode ausente/SEM GTIN e rejeições estruturais."
+    limitation: "Não houve chamada real à Edge Function com um XML de produção; a prova disponível é parser/fixture e conteúdo remoto inspecionado."
+  AC2:
+    result: PASS
+    evidence: "O handler autentica antes de resolver documento e persistir, deriva company_id do documento autorizado, aceita apenas document_version_id no corpo e persiste itens sob a mesma proposta. Testes cobrem ordem de autorização, tenant, itens, erro seguro e zero IA/quota; RLS remoto de itens exige company_id do usuário."
+    limitation: "Não foi executada requisição de extração em produção; a comprovação é estática, por contrato e pelos testes com doubles."
+  AC3:
+    result: FAIL
+    evidence: "A tabela implementa semântica, filtro por união, estados e duas decisões; os testes cobrem novo produto pendente, custo divergente e alertas. Porém onSelectProduct e onCreateNew enviam currentCost e saveNfeProposalItem o transforma em current_cost."
+    limitation: "A leitura remota de column_privileges mostrou UPDATE somente em matched_product_id, payload e update_cost_decision, não em current_cost. Em uma sessão authenticated, a seleção/criação não consegue salvar a decisão completa; nenhuma escrita foi usada para reproduzir o erro na produção."
+  AC4:
+    result: CONCERNS
+    evidence: "A UI apresenta nome, unidade, categoria, categoria inline e preço; isNfeProposalItemReady bloqueia o botão enquanto os quatro dados não estão válidos e a RPC exige as quatro chaves."
+    limitation: "O caminho padrão sem sugestão pode editar payload, mas a ação explícita Criar novo produto envia current_cost e cai no mesmo grant ausente do AC3; não foi possível clicar contra produção."
+  AC5:
+    result: CONCERNS
+    evidence: "Há extensão de categoria, margem aplicada apenas a preços vazios, autosave por payload e reidratação de proposta pendente."
+    limitation: "Não há cobertura completa de categoria em lote, margem, reload/expiração e condições de corrida entre autosaves; além disso, a decisão de alternar produto sofre o bloqueio de current_cost."
+  AC6:
+    result: CONCERNS
+    evidence: "Abaixo de 60 a tabela é renderizada; acima de 60 a UI preserva cabeçalho e exibe apenas VOLUME_NOTICE; acima de 20 itens pendentes aparece aviso não bloqueante; o texto antigo CUTOFF_NOTICE não aparece no app."
+    limitation: "Os testes executam 21 e 61, mas não os quatro lados explícitos 20/21 e 60/61 em casos separados; não houve prova E2E do cabeçalho acima do corte."
+  AC7:
+    result: CONCERNS
+    evidence: "O cliente faz preflight tenant/status, salva a proposta e chama somente apply_nfe_purchase_proposal; proposta aplicada não chama a RPC novamente. A RPC remota é invoker, bloqueia a proposta com FOR UPDATE e só marca applied ao final."
+    limitation: "Sem escrita em produção, não foi possível observar uma única aplicação real, duplo clique/retry concorrente, falha em item posterior, rollback nem contagens sem estado parcial. A validação do item também é afetada pelo grant de current_cost e o vínculo de matched_product_id não tem verificação explícita de company_id na RPC."
+  AC8:
+    result: CONCERNS
+    evidence: "A pré-condição deixou de estar bloqueada e foi verificada em 2026-08-25: @data-engineer reconciliou o histórico e aplicou 20260825140000; a RPC remota contém v_item_quantity e exatamente um UPDATE current_quantity = current_quantity + v_item_quantity fora do ELSIF de custo, para produto existente ou novo."
+    limitation: "A produção não pode receber proposta de teste. Portanto não foram observados incremento positivo, exatamente uma atualização por item, concorrência, rollback após falha posterior ou produto novo terminando na quantidade da nota; o resultado não é reportado como PASS."
+  AC9:
+    result: CONCERNS
+    evidence: "O commit não altera a Story 1.56; ela permanece Done. A função D10 remota tem a asserção positiva de incremento e a UI não possui caminho client-side paralelo de domínio/estoque."
+    limitation: "Sem aplicação autorizada de uma proposta real, não há snapshot antes/depois que prove a superação positiva do antigo AC9 em products, purchase_items e current_quantity."
+  AC10:
+    result: CONCERNS
+    evidence: "Há estado vazio aditivo, semântica table/caption, labels, foco inicial no heading, Escape, aria-live, role=alert, estados textuais e classes dark:."
+    limitation: "A validação foi estática e por testes estruturais; não houve teste automatizado de teclado/foco, contraste ou renderização real em claro/escuro."
+  AC11:
+    result: PASS
+    evidence: "Os quatro comandos globais foram executados separadamente no baseline e novamente após a emissão deste gate; lint focado e suíte focada passaram. A comparação mantém lint/typecheck globais sem piora, testes 66/586 e build 3005 módulos."
+    limitation: "O Debug Log do @dev registra typecheck com exit 1, enquanto a reprodução de @qa observa exit 2; os 24 diagnósticos são os mesmos e não há EPERM."
+
+top_issues:
+  - id: "DATA-001"
+    severity: high
+    finding: "document_import_proposal_items concede UPDATE a payload, matched_product_id e update_cost_decision, mas não a current_cost. O fluxo de onSelectProduct/onCreateNew envia current_cost e o autosave falha em decisões essenciais de item."
+    suggested_action: "@data-engineer deve corrigir o grant/migration de coluna de forma mínima e revisar RLS; depois @qa deve repetir a suíte e validar em ambiente descartável antes de liberar Done."
+  - id: "TEST-001"
+    severity: medium
+    finding: "AC7-AC9 não têm evidência de integração positiva em atomicidade, idempotência concorrente, rollback, incremento para produto existente/novo ou contagens pós-aplicação."
+    suggested_action: "Executar esses cenários apenas em branch/ambiente descartável Supabase autorizado, preservando a produção sem DML."
+  - id: "SEC-001"
+    severity: medium
+    finding: "A RPC aceita matched_product_id vindo do item e verifica company_id no UPDATE de products, mas não valida explicitamente que o produto referenciado pertence à empresa antes de inserir purchase_items."
+    suggested_action: "Adicionar validação server-side de pertencimento do produto à empresa ou uma restrição equivalente; cobrir tentativa cross-tenant em teste autorizado."
+  - id: "REL-001"
+    severity: medium
+    finding: "A Edge Function grava proposta e itens em chamadas separadas e tenta compensar apagando a proposta se a inserção dos itens falhar; se o delete falhar, pode sobrar proposta pending sem itens."
+    suggested_action: "Avaliar persistência transacional via RPC/rotina server-side ou mecanismo durável de compensação antes de depender do fluxo em volume."
+  - id: "TEST-002"
+    severity: low
+    finding: "Os testes de volume cobrem 21 e 61, mas não exercitam explicitamente os limites 20 e 60 nem todas as rejeições/estados previstos."
+    suggested_action: "Adicionar casos de fronteira 20/21 e 60/61 e matrizes de estados ao conjunto de regressão."
+  - id: "DOC-001"
+    severity: low
+    finding: "O Debug Log do @dev registra npm run typecheck com exit 1; a execução reproduzível de @qa retorna exit 2."
+    suggested_action: "Corrigir o código registrado na próxima manutenção documental; os 24 diagnósticos não pioraram."
+
+waiver:
+  active: false

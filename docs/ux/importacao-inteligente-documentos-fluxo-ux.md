@@ -358,3 +358,125 @@ Nada abaixo é requisito; são sugestões, e devem ser tratadas separadas do que
 - **Contrato de extração de item de NF-e (§3.6):** por item, a extração precisa devolver GTIN quando existir (a ausência muda o default de vínculo — §3.6.3), o `costPrice` atual do cadastro **e** o valor unitário da nota lado a lado (já registrado como decisão do usuário em `decisoes-usuario-importacao-documentos.md`, QA-2), e uma confiança de casamento de produto separada da confiança dos demais campos do item. Sem os três, §3.6.2 não é implementável como desenhado.
 
 Não falei com Compass nem Lantern diretamente — como pedido, todo tráfego passa pelo Orion.
+
+---
+
+## 11. Adendo (2026-08-25) — Revisão de itens de NF-e em volume: fechamento do R7
+
+**Origem:** `.aiox/briefs/prism-design-revisao-itens-volume.md` (Orion), a partir do gap registrado no epic (`docs/epics/epic-importacao-inteligente-documentos.md`, §7 e §12).
+
+**Correção de premissa, antes de tudo:** o brief e o epic descrevem este gap como totalmente aberto — "não há, hoje, um desenho explícito equivalente" para a lista de itens. Não é mais verdade: a §3.6 deste mesmo documento (commit `1be703d`, 2026-08-14) **já decidiu** o padrão de revisão por item, com as duas decisões independentes por linha (vínculo × custo), estados, defaults e wireframe 8.1b. O epic ficou com a linguagem desatualizada porque a mudança de §3.6 entrou no mesmo commit que fixou aquele texto — não porque a decisão nunca tivesse sido tomada. Recomendo ao Orion atualizar §7/§12 do epic para não induzir o próximo agente a pensar que o desenho começa do zero.
+
+O que este adendo faz, então, **não é redesenhar §3.6** — é: (1) confirmar que o padrão já decidido se sustenta e resolve uma imprecisão de terminologia; (2) corrigir uma célula da tabela de estados que está objetivamente errada contra o schema; (3) fechar o que §3.6 deixou **explicitamente em aberto**: o cadastro de produto novo dentro da revisão (o gargalo real apontado pelo brief) e o número do corte de volume (§3.6.5 dizia "sem propor o número" — este adendo propõe); (4) atualizar o texto do aviso de corte do piloto.
+
+### 11.1 O padrão de §3.6 se mantém — uma nota de terminologia, não uma mudança
+
+Confirmei a §3.6 contra o schema real (`supabase/migrations/20260814100000_document_import_proposals.sql`) e a RPC `apply_nfe_purchase_proposal`: `position`, `payload`, `field_origins`, `matched_product_id`, `current_cost`, `document_cost`, `update_cost_decision` — tudo bate exatamente com o que §3.6.2 assume. O padrão (duas decisões independentes por linha, sem transplantar cegamente o lote-por-exceção do extrato) continua sendo a decisão certa; não encontrei motivo para alterá-lo.
+
+**Uma correção de vocabulário, para quem for implementar:** §3.6.3 fala em item "sem GTIN". O campo real no schema/payload/RPC chama-se `barcode` (`document_import_proposal_items` não tem coluna `gtin`; a RPC lê `v_item.payload ->> 'barcode'`, migration linha 446). GTIN é o conceito correto do ponto de vista de NF-e (é o que popula `prod/cEAN` no XML), mas ninguém deve procurar uma coluna `gtin` — é `barcode`. Não é uma mudança de decisão, é uma nota de mapeamento para não travar a implementação.
+
+### 11.2 Exceções — uma célula da tabela de §3.6.2 precisa de correção
+
+A definição de exceção em §3.6.2/3.6.3 (confiança de vínculo, divergência de custo) continua válida. Mas a linha **"Novo produto"** da tabela de §3.6.2 diz "Bloqueia Gravar? Não" — isso está certo só para a *decisão de custo* (de fato não há o que decidir: "custo inicial = valor da nota" é fato, não escolha). Está **errado** para os outros quatro campos que a RPC exige quando não há `matched_product_id`: `new_product_category_id`, `new_product_name`, `new_product_sale_price`, `new_product_unit` (migration, linhas 453-467, comentário explícito: *"Nunca inventa categoria, unidade ou preço de venda — nenhum desses é extraível de um documento de compra"*). Se qualquer um desses quatro faltar, a RPC lança exceção e **desfaz a chamada inteira** — fornecedor, compra, todos os itens já processados no loop e parcelas, porque a função roda como uma transação só. Não é uma falha isolada daquele item; é a proposta inteira que não aplica.
+
+Ou seja: **"Novo produto" bloqueia "Gravar", sim** — não pela decisão de custo, mas pelos quatro campos de cadastro. Isso é o gargalo real que o brief pediu para resolver (§11.3). Estou emendando esta única célula de §3.6.2 aqui; não reescrevo a seção.
+
+**Nota de escopo sobre `field_origins` por item:** o schema tem `field_origins` também no nível do item (`document_import_proposal_items.field_origins`, não só na proposta), mas nesta onda a extração de item é 100% parsing determinístico de XML (`nfe.ts` hoje só extrai cabeçalho — `NfeHeaderProposalPayload` — e a Onda 2 é explicitamente "sem nenhuma chamada a IA"). Não existe, portanto, gradiente de confiança real nos *valores* de um item nesta onda — todo campo nasce `deterministic`. A única incerteza genuína por item, aqui, é a de casamento de produto (já coberta por §3.6.2/§3.6.3). Isso muda quando a Onda 5 (pdf.js) ou a Onda 7 (contrato, texto livre por IA) começarem a produzir itens com confiança real por campo — registro para quem desenhar a revisão de item dessas ondas, não decido isso agora.
+
+### 11.3 Cadastro de produto novo dentro da revisão — o gargalo real
+
+O brief está certo: numa nota com 12 produtos novos, 4 campos obrigatórios cada um são 48 campos manuais no desenho ingênuo. A decisão abaixo reduz isso ao que é genuinamente irredutível.
+
+**Dos quatro campos, dois têm sinal no documento e nascem preenchidos; dois não têm sinal nenhum e são decisão humana de verdade:**
+
+| Campo exigido pela RPC | Tem sinal na nota? | Comportamento |
+|---|---|---|
+| `new_product_name` | Sim — `xProd` (descrição do item, até 120 caracteres, leiaute 4.00) | Pré-preenchido com a descrição extraída; campo de baixo risco, editável desde o início (mesmo tratamento de §3.2 para campos de baixo risco — não é chip travado) |
+| `new_product_unit` | Parcial — `prod/uCom` (unidade comercial do XML: `UN`, `KG`, `CX`, etc.) | Mapeado para a mesma lista fixa já usada em `ProductModal.tsx` (Unidade/Kg/Litro/Caixa/Par/Metro — não é texto livre, é `<select>`). Código reconhecido pré-seleciona a opção correspondente. Código não reconhecido cai em "Unidade" pré-selecionado, mas marcado amber "confirmar" — é um palpite, não uma certeza, e por isso recebe o mesmo tratamento visual de confiança média de §3.3 |
+| `new_product_category_id` | Não — nenhuma nota fiscal carrega categoria interna do cadastro do cliente | Decisão humana obrigatória, um `<select>` por linha, reaproveitando a mesma UI de "cadastrar categoria rápida inline" que já existe em `ProductModal.tsx` (linhas 118-126 e 269-296) — não é um componente novo |
+| `new_product_sale_price` | Não — a nota só informa custo, nunca preço de venda | Decisão humana obrigatória por linha (ver mitigação de lote abaixo — deliberadamente mais fraca que a de categoria) |
+
+**Mitigação de lote para categoria** (o campo que mais se repete entre produtos da mesma nota): depois que o usuário escolhe a categoria do **primeiro** produto novo, a tela oferece — nunca pré-marcado, mesmo espírito de §3.6.4 — *"Usar [Categoria X] também para os outros N produtos novos sem categoria? [Aplicar aos N] [Não, decidir um a um]"*. Cada linha afetada continua reabrível antes de "Gravar".
+
+**Sem mitigação de lote equivalente para preço de venda, de propósito:** dois produtos novos da mesma nota não têm por que ter a mesma margem — copiar um valor de preço entre linhas é um risco mais alto que copiar uma categoria (categoria é taxonomia; preço de venda é decisão comercial direta). Em vez de copiar valor, ofereço uma conveniência de digitação, não um default de negócio: um campo único no topo da tabela de itens, **"Sugerir preço de venda com margem de ___% sobre o custo"**, que calcula e preenche o campo de preço de cada produto novo vazio — mas o campo continua editável e continua obrigatório antes de "Gravar". Não é persistido, não é aplicado sem o usuário ver o número calculado em cada linha, e não substitui a validação individual.
+
+**Efeito líquido:** no pior caso (nota inteira de produtos novos, nenhuma categoria compartilhada), o usuário ainda decide categoria e preço por produto — isso não desaparece, porque nenhum dos dois pode ser inventado (Artigo IV). Mas deixa de ser 4×N: nome e unidade não custam decisão na maioria dos casos (viram confirmação, não digitação), e a extensão de categoria em lote colapsa N decisões de categoria numa só depois da primeira.
+
+**Estado de linha novo, complementando a tabela de §3.6.2:**
+
+| Estado | Quando | Bloqueia "Gravar"? |
+|---|---|---|
+| **Novo produto — dados pendentes** | Sem correspondência confiável **e** categoria ou preço de venda ainda vazios | Sim |
+| **Novo produto — pronto** | Sem correspondência confiável, categoria e preço de venda preenchidos | Não |
+
+**O que acontece se o usuário abandonar no meio (pergunta explícita do brief):** nada se perde. A RLS já concede `UPDATE` direto de `payload` (proposta e itens) para o usuário autenticado enquanto `status = 'pending'` (migration, linhas 237 e 241-242) — a tela deve salvar cada campo assim que preenchido (autosave por campo/linha), não guardar em estado de formulário só até o clique final. Fechar a aba, atualizar a página ou sair no meio do cadastro de 12 produtos novos não descarta nada: a proposta continua `pending`, expira em 7 dias (`expires_at`, migration linha 94), e reabrir o mesmo documento retoma a revisão com os campos já digitados ainda lá. "Abandonar no meio" não é um estado de erro a desenhar — é uma pausa, e a persistência já existe no schema para sustentar isso sem migration nova.
+
+### 11.4 Ponto de corte de volume — decisão: 60 itens
+
+§3.6.5 já desenhou o comportamento acima do corte (fornecedor/compra/parcelas seguem normalmente; itens não entram; aviso explícito) mas recusou propor o número. Decido agora: **60 itens.**
+
+Por quê:
+- O limite não é de renderização — uma tabela de 200 linhas display-only não é problema técnico. O limite é fadiga de decisão (R7), e essa fadiga escala com o número de **exceções**, não com o número total de linhas, porque a maioria das linhas custa zero cliques (§3.6.4). Um corte por contagem bruta de itens é uma aproximação, não a medida exata do risco.
+- Ainda assim, a partir de ~60 itens, mesmo com a mecânica de exceção funcionando perfeitamente, o pior caso plausível — primeira nota de um fornecedor novo, com boa parte dos itens sendo produto novo — pode facilmente gerar dezenas de decisões de categoria/preço genuinamente irredutíveis (§11.3). Acima desse volume, revisar a nota inteira deixa de ser tarefa de uma sentada e vira, na prática, cadastro de catálogo — melhor feito na tela de Produtos (que já tem suas próprias ferramentas de cadastro), não dentro do modal de revisão de um documento.
+- 60 dá margem de 2× sobre o topo do caso comum (30, conforme brief) antes de degradar, e deixa 140 itens de folga abaixo do teto rígido do banco (`position < 200`) — o próprio comentário da migration já chama esse teto de "placeholder até prototipagem medir o número real" (linhas 106-111). O corte de 60 é independente desse teto e deve mudar antes dele se o uso real mostrar outro número — é heurística de design, não medição, no mesmo espírito do "tamanho relativo" do epic §6.
+
+**Sub-aviso complementar, não bloqueante, abaixo do corte de 60:** se o número de linhas que exigem decisão (vínculo a revisar + custo divergente + produto novo pendente, somados) passar de **20** num documento com menos de 60 itens no total, mostrar um aviso não-bloqueante no topo da tabela: *"Esta nota tem N itens que precisam da sua atenção. Nada será perdido se você revisar em mais de uma vez."* Não impede continuar — só avisa, porque nesse ponto a premissa central do padrão ("a maioria não custa decisão nenhuma") já não é verdade para aquele documento específico, e o usuário merece saber antes de se comprometer com a tela inteira de uma vez.
+
+### 11.5 Wireframe — linha de produto novo expandida e avisos de volume
+
+Estende o wireframe 8.1b (não o substitui). Linha "Broca aço rápido 6mm" de 8.1b, agora com o formulário de cadastro visível:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────┐
+│ ⚠ │ 🆕 Broca aço rápido 6mm             │ 15   │ R$ 3,20  │ —  │ novo produto —      │
+│   │    (sem correspondência)             │      │          │    │ dados pendentes     │
+│   ├──────────────────────────────────────────────────────────────────────────────────┤
+│   │ Nome         [Broca aço rápido 6mm________________] (extraído da nota, editável)  │
+│   │ Unidade      [Unidade ▾] ⚠ confirmar (código "PC" não reconhecido, sugestão)      │
+│   │ Categoria    [Selecione uma categoria ▾]  [+ nova categoria]        *obrigatório  │
+│   │ Preço venda  [__________] ou aplicar margem sugerida abaixo         *obrigatório  │
+│   └──────────────────────────────────────────────────────────────────────────────────┘
+│   │ Sugerir preço de venda com margem de [___]% sobre o custo  [Aplicar aos vazios]   │
+│   │ Usar "Ferragens" também para os outros 4 produtos novos sem categoria?            │
+│   │ [Aplicar aos 4]  [Não, decidir um a um]                                           │
+└────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Header da tabela de itens (§8.1b), com o sub-aviso de exceções (§11.4):
+
+```
+🆕 3 novos (2 pendentes) · 🔗 12 vinculados · ⚠ 5 revisar
+⚠ Esta nota tem 22 itens que precisam da sua atenção. Nada será perdido se você revisar em mais de uma vez.
+```
+
+Estado acima do corte (substitui o texto de exemplo de §3.6.5/linha 291, mesmo mecanismo, número agora concreto):
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  ⚠ Esta nota tem 74 itens — acima dos 60 que revisamos automaticamente aqui.     │
+│  Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados   │
+│  ao estoque — lance-os manualmente.                                              │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 11.6 Texto do aviso de corte do piloto
+
+O texto hoje vive em código, não só em documento: `CUTOFF_NOTICE` em `src/pages/documents/components/DocumentImportReviewModal.tsx:13` — *"Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados."* Com itens/produtos entrando na Onda 3, esse texto fica falso. Duas versões, porque a resposta depende da decisão paralela do Compass (brief, seção 6):
+
+- **Se o estoque entrar nesta onda** (o brief pede para desenhar assumindo isso): o aviso genérico de corte **desaparece** do caminho normal (documento dentro do limite de 60 itens) — não há mais nada a avisar, porque fornecedor, compra, itens, produtos e estoque passam a ser importados de fato. O único aviso que resta é o de volume (§11.4/§3.6.5), que já é condicional e só aparece acima de 60 itens — esse não muda.
+- **Se o estoque não entrar nesta onda** (caso a decisão do Compass vá para esse lado): o aviso continua existindo, mas mais estreito que o de hoje, porque só o estoque fica de fora agora (não mais itens/produtos também): **"Produtos desta nota foram cadastrados ou vinculados, mas o estoque não foi atualizado automaticamente. Dê entrada manualmente."** — no mesmo lugar e mesmos três estados (revisão, resumo, sucesso) que a Story 1.56 já usa para `CUTOFF_NOTICE` hoje.
+
+Não decido qual das duas vale — isso é reconciliado por Orion quando a resposta do Compass voltar, exatamente como o brief pediu.
+
+### 11.7 Dependências e riscos para outros agentes
+
+- **@architect (Compass):** a decisão de estoque (brief, seção 6) determina qual das duas versões de §11.6 vale. Também registro o que medi na RPC: `apply_nfe_purchase_proposal` nunca atualiza `products.current_quantity` de um produto já existente, e cria produto novo sempre com `current_quantity = 0` (migration, linhas 470-482) — confirma a leitura do brief de que a entrada em estoque hoje só acontece pelo lado do cliente. Não decido isso, só registro o fato observado; a decisão é da Compass.
+- **@sm / @dev:** `apply_nfe_purchase_proposal` é atômica por chamada de função — uma exceção em qualquer item (inclusive por produto novo com dados incompletos) desfaz tudo que a função já tinha inserido naquela chamada, não só aquele item. A tela precisa impedir esse caminho bloqueando "Gravar" enquanto houver "Novo produto — dados pendentes" (§11.3), porque a mensagem de erro que a RPC devolve nesse caso (migration, linhas 461-466) não foi escrita para aparecer numa tela de usuário final pós-clique.
+- **Terminologia (§11.1):** "GTIN" em §3.6.3 corresponde ao campo `barcode` no schema/payload/RPC — não existe coluna `gtin`.
+- **Épico:** recomendo a Orion atualizar a linguagem de §7/§12 do epic, que hoje descreve este gap como totalmente em aberto quando, na verdade, a maior parte (o padrão de §3.6) já estava decidida desde 14/08 — só o cadastro de produto novo e o número do corte (o que este adendo fecha) seguiam pendentes.
+
+### 11.8 Fora deste adendo
+
+- Não decido se o estoque entra nesta onda — arquitetura, Compass, em paralelo (§11.6 cobre as duas respostas possíveis).
+- Não decido o rótulo comercial final da feature ("Importar com Gestly") — já registrado como aberto no epic §12, sem relação com este gap.
+- Não redesenho §3.6 nem o wireframe 8.1b — só emendo a célula "Novo produto / Bloqueia Gravar?" (§11.2) e preencho as duas lacunas que a própria §3.6.5 deixou explicitamente em aberto.

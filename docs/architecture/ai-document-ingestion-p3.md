@@ -373,3 +373,159 @@ Itens não solicitados pelo usuário, separados conforme o Artigo IV:
 ### Restrição de migration (NFR-2)
 
 **Nenhuma migration desta P3 é aplicada sem autorização explícita do usuário, uma a uma — inclusive migration no-op.** Toda migration deve vir acompanhada do rollback correspondente em `supabase/rollbacks/`. O agente escreve e testa os arquivos; não os aplica. Não há exceção para este documento.
+
+## Adendo (2026-08-25) — onde e como o estoque entra na aplicação da proposta de NF-e
+
+Decisão de arquitetura sobre uma incoerência entre este ADR e a implementação, levantada pelo
+`@aiox-master` ao preparar a segunda metade da Onda 3 (itens, produtos, estoque — cortada
+explicitamente do piloto das Stories 1.55/1.56). Não reabre nada já fechado acima; resolve uma
+lacuna que o texto original não cobria porque o piloto proibiu estoque de propósito.
+
+### O que verifiquei, linha a linha
+
+- **`apply_nfe_purchase_proposal`** (`supabase/migrations/20260814100000_document_import_proposals.sql:437-505`)
+  não contém nenhum `UPDATE` de `current_quantity`. No laço de itens: casa produto por
+  `matched_product_id` ou por `barcode`; quando não casa, cria produto novo com
+  `current_quantity, min_quantity, max_quantity` fixos em `0, 0, 0` (linha ~473); quando casa e
+  `update_cost_decision = 'update'`, atualiza só `cost_price` (QA-2). O estoque nunca é tocado, nem
+  para o produto existente nem para o recém-criado.
+- **Não há trigger que compense isso.** Busquei `CREATE TRIGGER` em todas as migrations: os únicos
+  três em `20260814100000` são `updated_at` de `document_extraction_jobs`,
+  `document_import_proposals` e `document_import_proposal_items` — nenhum toca `products` ou
+  `purchase_items`. Todo o resto do projeto usa `current_quantity` só em leitura (alertas de
+  estoque baixo, tools read-only do Gestly).
+- **A compra manual atualiza estoque pelo cliente, sem atomicidade.**
+  `src/services/purchaseService.ts:236-248`: depois de inserir `purchases` e `purchase_items`, um
+  laço em JS lê `current_quantity`, soma `item.quantity` no cliente e grava de volta — três
+  chamadas Supabase separadas, sem transação, sem lock. Duas compras concorrentes do mesmo produto
+  podem perder uma soma (last-write-wins na terceira chamada).
+- **AC9 da Story 1.56** (`docs/stories/1.56.revisao-confirmacao-cabecalho-nfe.story.md:45`) exige
+  hoje que "as contagens de `products` e `purchase_items` permaneçam inalteradas e nenhuma
+  quantidade de estoque mude" — restrição de piloto, não princípio permanente. **AC10** (linha 46)
+  fixa que a RPC sob RLS é o caminho de aplicação; D2 acima já dizia isso para o ADR inteiro
+  ("A escrita é ato do usuário, não do modelo" — via RPC dedicada, `SECURITY INVOKER`, JWT do
+  usuário). Os três fatos batem com a leitura do brief; não achei divergência.
+
+### D10 — a RPC de aplicação passa a atualizar `current_quantity`, no mesmo laço e na mesma transação
+
+**Escolhida: opção A do leque apresentado** (alterar `apply_nfe_purchase_proposal` para escrever
+estoque dentro de si mesma). Descarto as outras três:
+
+- **Opção C (client-side, como `purchaseService` faz hoje) fica fora por violar D2/D8 diretamente**,
+  não por preferência de estilo. D2 já estabelece que a escrita de domínio é a RPC sob RLS; abrir uma
+  segunda escrita client-side para o mesmo domínio reintroduz exatamente a falha de atomicidade que
+  o achado (c) documenta, e contraria AC10 do piloto que este próprio ADR sustenta. Sem
+  contraproposta melhor no leque, não há caso para escolher C.
+- **Opção B (trigger em `purchase_items`) fica fora por uma razão que o brief não tinha:** um trigger
+  `AFTER INSERT ON purchase_items` dispararia também para a compra manual — e `purchaseService.ts`
+  **já** incrementa `current_quantity` para esse mesmo insert, hoje, no cliente. Ligar B sem remover
+  o laço de `purchaseService.ts:236-248` **soma o estoque em dobro** em toda compra manual a partir
+  do dia em que o trigger existisse. B não é "resolve os dois fluxos de uma vez" como o brief
+  cogitou — é "resolve a importação e quebra silenciosamente a compra manual", a menos que eu
+  also decida remover o laço client-side agora. Isso é mudar comportamento e código de um fluxo que
+  não é desta feature, e as fronteiras duras desta tarefa proíbem tocar código de aplicação. B fica
+  descartada enquanto essa dependência não for endereçada como decisão própria — não é decisão para
+  tomar de passagem dentro deste adendo.
+- **Opção D (estoque fora desta onda)** contraria o próprio motivo da tarefa — "completa a 3" — sem
+  que exista, nos fatos apurados, nenhum bloqueio técnico que force adiar. A única coisa que trava é
+  autorização de migration (endereçada abaixo), que já é o regime normal deste projeto (NFR-2), não
+  uma exceção nova. Não há decisão de apetite de risco do usuário pendente aqui: entregar a Onda 3
+  sem estoque seria decisão de escopo, não de arquitetura, e nada nos fatos exige tomá-la.
+
+**Forma da mudança, para orientar a `@data-engineer`:** dentro do `LOOP` de itens já existente
+(`FOR v_item IN ... FOR UPDATE`), depois de resolver `v_product_id` (produto casado OU recém-criado
+— os dois ramos do `IF`), um único `UPDATE public.products SET current_quantity = current_quantity +
+v_item_quantity WHERE id = v_product_id AND company_id = v_company_id` incondicional, fora do
+`ELSIF update_cost_decision = 'update'` (que é sobre custo, não sobre quantidade — os dois são
+independentes e não podem ficar aninhados um no outro). `v_item_quantity` é a mesma expressão já
+usada para `v_subtotal` (`COALESCE((v_item.payload ->> 'quantity')::NUMERIC, 0)`); vale nomeá-la para
+não repetir o `COALESCE` duas vezes.
+
+**Por que isso já resolve atomicidade sem lock explícito adicional:** `UPDATE ... SET x = x + n` é
+uma única instrução; Postgres serializa automaticamente updates concorrentes na mesma linha — a
+segunda transação bloqueia na linha até a primeira commitar, e então lê o valor já commitado antes de
+somar o seu próprio incremento. A função inteira roda em uma transação implícita (é `plpgsql`
+padrão, sem `COMMIT` interno), então se qualquer passo do laço falhar depois do `UPDATE` de estoque
+— um item mal formado três iterações à frente, por exemplo — o incremento é revertido junto com o
+resto. Isso é o que "mesma transação" está comprando: não existe estado intermediário em que a
+compra existe e o estoque não subiu (o problema que a opção C tem, e que o achado (c) descreve para
+`purchaseService`).
+
+### Produto novo: termina com a quantidade da nota, não com zero
+
+O `INSERT` que cria produto novo continua gravando `current_quantity = 0` (mantém o INSERT como
+está — não há razão para calcular a quantidade duas vezes em pontos diferentes do código). O
+`UPDATE` incondicional descrito acima roda **depois**, para os dois ramos do `IF` sem distinção —
+produto recém-criado sai de `0` para `0 + v_item_quantity = v_item_quantity`; produto casado sai de
+`current_quantity` para `current_quantity + v_item_quantity`. Nenhum dos dois duplica, porque existe
+exatamente um `UPDATE` de estoque por item processado, sempre fora de qualquer condicional de custo.
+
+### Migration: obrigatória, escrita e revisada, **não aplicada**
+
+Esta decisão exige migration nova. Confirmo o regime da seção "Restrição de migration (NFR-2)"
+acima: a `@data-engineer` escreve o `CREATE OR REPLACE FUNCTION apply_nfe_purchase_proposal(...)`
+com o corpo atualizado e o rollback correspondente em `supabase/rollbacks/`; **ninguém aplica** sem
+autorização explícita do usuário, e ele está fora do PC agora. **Arquivo novo, não edição do arquivo
+já aplicado** — `20260814100000_document_import_proposals.sql` já rodou em produção (ver próximo
+parágrafo); o padrão que o projeto já usa para alterar uma função existente é um novo arquivo
+timestamped que faz `CREATE OR REPLACE FUNCTION` sobre a mesma assinatura, como
+`20260814101500_ai_usage_feature_dimension.sql` já fez para outra função. Editar o arquivo de
+14/08 in-place divergiria do que já está no banco.
+
+**Isto depende da reconciliação registrada em `docs/data/document-import-proposals-schema.md` §10,
+e essa dependência é de ordem, não de mérito.** A migration `20260814100000` foi aplicada em
+2026-08-22 sob uma versão diferente (`20260822182249`) do que consta no nome do arquivo local — a
+tabela `schema_migrations` não tem `20260814100000`. Um `supabase db push` hoje tentaria rodar esse
+arquivo de novo, e falharia nos `CREATE POLICY`/`CREATE TRIGGER` sem `IF NOT EXISTS`, travando a fila
+de pendentes **antes** de alcançar qualquer migration nova — inclusive esta. Isso não muda a escolha
+por A: o defeito está na ordem de aplicação, não na forma da mudança, e reconciliar (opção A ou B da
+§10 daquele documento) é pré-requisito de sequenciamento independente desta decisão. Se a
+reconciliação não acontecer antes, esta migration fica escrita e revisada, mas **inaplicável** até
+que aconteça — registro isso para quem sequenciar a story não presuma que "migration pronta" quer
+dizer "migration aplicável".
+
+### A dívida do `purchaseService` fica fora desta onda — julgamento próprio, mesma conclusão do Orion
+
+Concordo com a inclinação do brief, mas por um motivo estrutural, não por aceitar a opinião por ser
+dele: a opção A não tem nenhum acoplamento com `purchaseService.ts`. É outra RPC, outro caminho de
+escrita, outra tabela de entrada (`document_import_proposal_items` vs. o array `data.items` da
+compra manual). Corrigir o read-modify-write do `purchaseService` não é pré-requisito técnico de A —
+só seria inevitável sob a opção B, que já descartei acima por razão própria. Ampliar o escopo desta
+onda para consertar uma dívida preexistente e não relacionada atrasaria a entrega sem necessidade
+técnica.
+
+**Registro como recomendação fora do pedido (Artigo IV), não como decisão desta onda:** depois que a
+RPC de importação tiver o padrão atômico (`UPDATE ... SET x = x + n`, sem read-modify-write em
+aplicação), o projeto passa a ter dois caminhos para a mesma mutação de domínio com garantias
+diferentes — um atômico, um não. Convergir `purchaseService` para o mesmo padrão (RPC dedicada ou,
+no mínimo, um `UPDATE` incremental de uma instrução em vez de leitura-soma-escrita em três chamadas)
+é candidato de onda futura. Não implementado, não desenhado em detalhe aqui — só nomeado para não
+virar descoberta de novo daqui a três meses, no mesmo espírito do parágrafo de D7.
+
+### Impacto na tela de revisão: nenhum identificado
+
+Não encontrei necessidade de mudança na tela de revisão para sustentar D10. O incremento de estoque
+é derivado de dado que a tela já coleta e que a RPC já recebe — quantidade por item, decisão de
+custo por item (QA-2), vínculo ou criação de produto. Nenhum campo novo, nenhum contrato de payload
+novo. **Não falei com a Uma sobre isso**, conforme as fronteiras desta tarefa; se ao revisar este
+adendo ela enxergar um efeito na tela que eu não vi daqui, é ponto para o Orion reconciliar, não
+premissa minha.
+
+### Consequência para a Story 1.56 — para o `@sm` saber, não para eu decidir
+
+O AC9 da Story 1.56 (linha 45, citado acima) é uma asserção de **zero mudança de estoque**, escrita
+porque o piloto cortou estoque de propósito. D10 supera essa asserção por desenho — a partir da
+story que implementar D10, aplicar uma proposta de NF-e **deve** mudar `current_quantity`. Isso não
+é regressão do AC9: é o próprio corte que a Story 1.56 documentou deixando de existir na fase para a
+qual ele foi cortado. Quem escrever a próxima story precisa registrar isso explicitamente — um AC
+que supere ou substitua o AC9 antigo, não um teste novo que finge que os dois convivem.
+
+### Delegações desta decisão
+
+- **`@data-engineer` (Dara):** escreve o `CREATE OR REPLACE FUNCTION apply_nfe_purchase_proposal`
+  com o `UPDATE` de estoque descrito acima, em migration nova, mais o rollback correspondente. Não
+  aplica. Decide o nome exato do arquivo, a nomeação de variável e qualquer detalhe de SQL que este
+  adendo não fixou — a forma é dela; o quê e o porquê são deste documento.
+- **`@aiox-master` (Orion):** leva a pré-condição de reconciliação (§10 do schema doc) e a
+  autorização de migration ao usuário quando ele voltar; sequencia a story sabendo que há um passo
+  bloqueado no meio dela (seção "Migration" acima).

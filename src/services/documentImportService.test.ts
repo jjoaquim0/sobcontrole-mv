@@ -204,7 +204,7 @@ describe('documentImportService — contratos de extração e validação', () =
 
     const items = await getNfeProposalItems(PROPOSAL_ID);
 
-    expect(items[0]).toMatchObject({ id: 'item-1', position: 0, matchedProductId: null, documentCost: 4.5, suggestedProduct: { id: 'product-1', confidence: 'high' } });
+    expect(items[0]).toMatchObject({ id: 'item-1', position: 0, matchedProductId: null, documentCost: 4.5, suggestedProduct: { id: 'product-1', confidence: 'high', costPrice: 4 } });
     expect(mocks.queries.get('document_import_proposal_items')?.eq).toHaveBeenCalledWith('proposal_id', PROPOSAL_ID);
     expect(mocks.queries.get('document_import_proposal_items')?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
     expect(mocks.queries.get('document_import_proposal_items')?.order).toHaveBeenCalledWith('position', { ascending: true });
@@ -217,17 +217,46 @@ describe('documentImportService — contratos de extração e validação', () =
     await saveNfeProposalItem(PROPOSAL_ID, 'item-1', {
       payload: { ...itemRow().payload as Record<string, unknown>, new_product_category_id: 'category-1', new_product_sale_price: 9 },
       matchedProductId: null,
-      currentCost: null,
       updateCostDecision: 'keep',
       suggestedProduct: null,
     });
 
     const query = mocks.queries.get('document_import_proposal_items');
-    expect(query?.update).toHaveBeenCalledWith({ payload: expect.objectContaining({ new_product_category_id: 'category-1', new_product_sale_price: 9 }), matched_product_id: null, current_cost: null, update_cost_decision: 'keep' });
+    expect(query?.update).toHaveBeenCalledWith({ payload: expect.objectContaining({ new_product_category_id: 'category-1', new_product_sale_price: 9 }), matched_product_id: null, update_cost_decision: 'keep' });
     expect(query?.eq).toHaveBeenCalledWith('id', 'item-1');
     expect(query?.eq).toHaveBeenCalledWith('proposal_id', PROPOSAL_ID);
     expect(query?.eq).toHaveBeenCalledWith('company_id', COMPANY_ID);
     expect((query?.update.mock.calls[0][0] as Record<string, unknown>)).not.toHaveProperty('suggestedProduct');
+  });
+
+  it('does not send current_cost when selecting a product even when the patch includes the current cost', async () => {
+    mocks.results.set('document_import_proposal_items', { data: itemRow({ matched_product_id: 'product-1' }), error: null });
+
+    await saveNfeProposalItem(PROPOSAL_ID, 'item-1', {
+      matchedProductId: 'product-1',
+      currentCost: 7.5,
+      suggestedProduct: { id: 'product-1', name: 'Produto', barcode: null, unit: 'Unidade', costPrice: 7.5, salePrice: 10, categoryId: null, confidence: 'medium' },
+      updateCostDecision: 'pending',
+    });
+
+    const update = mocks.queries.get('document_import_proposal_items')?.update.mock.calls[0][0] as Record<string, unknown>;
+    expect(update).toEqual({ matched_product_id: 'product-1', update_cost_decision: 'pending' });
+    expect(update).not.toHaveProperty('current_cost');
+  });
+
+  it('does not send current_cost when creating a new product', async () => {
+    mocks.results.set('document_import_proposal_items', { data: itemRow(), error: null });
+
+    await saveNfeProposalItem(PROPOSAL_ID, 'item-1', {
+      matchedProductId: null,
+      currentCost: null,
+      suggestedProduct: null,
+      updateCostDecision: 'pending',
+    });
+
+    const update = mocks.queries.get('document_import_proposal_items')?.update.mock.calls[0][0] as Record<string, unknown>;
+    expect(update).toEqual({ matched_product_id: null, update_cost_decision: 'pending' });
+    expect(update).not.toHaveProperty('current_cost');
   });
 
   it('mantém estados seguros: produto novo exige quatro campos e divergência não recebe decisão automática', () => {

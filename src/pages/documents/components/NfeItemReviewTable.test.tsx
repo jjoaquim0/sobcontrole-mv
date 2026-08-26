@@ -58,7 +58,7 @@ describe('NfeItemReviewTable', () => {
 
   it('mostra as duas decisões independentes quando há custo divergente', async () => {
     const product: NfeProductSuggestion = { id: 'product-1', name: 'Produto existente', barcode: null, unit: 'Unidade', costPrice: 2, salePrice: 5, categoryId: 'category-1', confidence: 'high' };
-    render(<NfeItemReviewTable {...props({ items: [baseItem({ matchedProductId: 'product-1', suggestedProduct: product, currentCost: 2 })] })} />);
+    render(<NfeItemReviewTable {...props({ items: [baseItem({ matchedProductId: 'product-1', suggestedProduct: product, currentCost: null })] })} />);
 
     await waitFor(() => expect(screen.getByText('Custo divergente — escolha uma opção')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: 'Manter R$ 2,00' })).toBeInTheDocument();
@@ -67,9 +67,43 @@ describe('NfeItemReviewTable', () => {
 
   it('avisa acima de vinte itens que precisam de atenção sem esconder a tabela', async () => {
     const items = Array.from({ length: 21 }, (_, position) => baseItem({ id: `item-${position}`, position }));
-    render(<NfeItemReviewTable {...props({ items })} />);
+    render(<NfeItemReviewTable {...props({ items, loadCategories: vi.fn(() => new Promise<never[]>(() => undefined)) })} />);
 
     expect(await screen.findByText('Esta nota tem 21 itens que precisam da sua atenção. Nada será perdido se você revisar em mais de uma vez.')).toBeInTheDocument();
     expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+
+  it('não avisa no limite de vinte itens que precisam de atenção', () => {
+    const items = Array.from({ length: 20 }, (_, position) => baseItem({ id: `item-${position}`, position }));
+    render(<NfeItemReviewTable {...props({ items, loadCategories: vi.fn(() => new Promise<never[]>(() => undefined)) })} />);
+
+    expect(screen.queryByText('Esta nota tem 20 itens que precisam da sua atenção. Nada será perdido se você revisar em mais de uma vez.')).not.toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
+  });
+
+  it('sends only link, decision, and suggestion when selecting a product', async () => {
+    const product: NfeProductSuggestion = { id: 'product-1', name: 'Produto selecionado', barcode: null, unit: 'Unidade', costPrice: 7.5, salePrice: 10, categoryId: 'category-1', confidence: 'medium' };
+    const onSaveItem = vi.fn(async (itemId: string, patch: object) => ({ ...baseItem({ id: itemId }), ...(patch as Partial<NfeImportProposalItem>) }));
+    render(<NfeItemReviewTable {...props({ onSaveItem, onSearchProducts: vi.fn(async () => [product]) })} />);
+
+    fireEvent.change(screen.getByLabelText('Buscar outro produto'), { target: { value: 'Produto' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar produtos' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Produto selecionado/ })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: /Produto selecionado/ }));
+
+    await waitFor(() => expect(onSaveItem).toHaveBeenCalledWith('item-1', expect.objectContaining({ matchedProductId: 'product-1', suggestedProduct: product, updateCostDecision: 'pending' })));
+    const lastPatch = onSaveItem.mock.calls[onSaveItem.mock.calls.length - 1]?.[1] as Record<string, unknown>;
+    expect(lastPatch).not.toHaveProperty('currentCost');
+  });
+
+  it('sends only null link and decision when creating a new product', async () => {
+    const onSaveItem = vi.fn(async (itemId: string, patch: object) => ({ ...baseItem({ id: itemId }), ...(patch as Partial<NfeImportProposalItem>) }));
+    render(<NfeItemReviewTable {...props({ onSaveItem })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Criar novo produto' }));
+
+    await waitFor(() => expect(onSaveItem).toHaveBeenCalledWith('item-1', expect.objectContaining({ matchedProductId: null, suggestedProduct: null, updateCostDecision: 'pending' })));
+    const lastPatch = onSaveItem.mock.calls[onSaveItem.mock.calls.length - 1]?.[1] as Record<string, unknown>;
+    expect(lastPatch).not.toHaveProperty('currentCost');
   });
 });

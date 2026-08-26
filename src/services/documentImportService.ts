@@ -667,12 +667,6 @@ export const saveNfeProposalItem = async (
   const update: Record<string, unknown> = {};
   if (patch.payload) update.payload = sanitizeNfeItemPayload(patch.payload);
   if (patch.matchedProductId !== undefined) update.matched_product_id = patch.matchedProductId;
-  if (patch.currentCost !== undefined) {
-    if (patch.currentCost !== null && (!Number.isFinite(patch.currentCost) || patch.currentCost < 0)) {
-      throw new DocumentImportError('validation_error');
-    }
-    update.current_cost = patch.currentCost;
-  }
   if (patch.updateCostDecision !== undefined) update.update_cost_decision = patch.updateCostDecision;
   if (Object.keys(update).length === 0) throw new DocumentImportError('validation_error');
 

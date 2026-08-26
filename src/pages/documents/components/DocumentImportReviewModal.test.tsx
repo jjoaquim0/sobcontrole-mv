@@ -123,4 +123,13 @@ describe('DocumentImportReviewModal', () => {
     expect(screen.queryByText('Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ver resumo e confirmar' })).toBeEnabled();
   });
+
+  it('keeps the normal review flow at the limit of 60 items', () => {
+    flow.current = { ...createFlow(), itemCount: 60 };
+    render(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={document} />);
+
+    expect(screen.queryByText('Esta nota tem 60 itens — acima dos 60 que revisamos automaticamente aqui. Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados ao estoque — lance-os manualmente.')).not.toBeInTheDocument();
+    expect(screen.getByText('Não foi possível identificar itens nesta nota. Revise o restante dos dados — produtos podem ser lançados manualmente depois.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ver resumo e confirmar' })).toBeEnabled();
+  });
 });

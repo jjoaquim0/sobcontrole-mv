@@ -1,0 +1,137 @@
+schema: 1
+story: "1.56"
+gate: CONCERNS
+status_reason: "Implementação local, lint focado, suíte focada, suíte completa e build passam sem regressão atribuível à Story. A função document-extraction não está publicada no projeto remoto, portanto o fluxo real pós-upload não é executável; permanecem sem prova autorizada os efeitos de domínio, atomicidade real, idempotência concorrente, isolamento cross-tenant e contagens de produtos/purchase_items/estoque."
+reviewer: "Quinn"
+updated: "2026-08-24"
+
+baseline:
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "276 erros e 2 warnings (278 problemas), todos fora dos caminhos da Story; baseline reproduzido."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "24 diagnósticos TypeScript preexistentes, nenhum nos arquivos da Story; o exit code real do comando é 2."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "65 arquivos e 573 testes aprovados, 0 falhas."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "PASS; warning informativo do Vite sobre chunks acima de 500 kB."
+
+final:
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "276 erros e 2 warnings (278 problemas), sem piora global."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "Os mesmos 24 diagnósticos preexistentes; nenhum diagnóstico nos arquivos da Story."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "65 arquivos e 573 testes aprovados, 0 falhas."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "PASS; mesmo warning informativo de chunk acima de 500 kB."
+
+focused:
+  lint:
+    command: "npx eslint <12 caminhos tocados pela Story> --report-unused-disable-directives --max-warnings 0"
+    exit_code: 0
+    result: "0 erros e 0 warnings."
+  tests:
+    command: "npx vitest run src/services/documentImportService.test.ts src/hooks/useDocumentImport.test.tsx src/pages/documents/components/DocumentImportAction.test.tsx src/pages/documents/components/DocumentImportReviewModal.test.tsx src/pages/documents/components/DocumentUploadModal.test.tsx"
+    exit_code: 0
+    result: "5 arquivos e 22 testes aprovados."
+  remote_edge_functions:
+    operation: "Supabase list_edge_functions (somente leitura)"
+    result: "6 funções ACTIVE; document-extraction ausente."
+  coderabbit: "Não executado: sem autorização específica para enviar código a serviço externo."
+  migrations: "Não aplicadas; nenhum deploy, db push, DDL/DML remoto ou migration repair executado."
+
+scope_audit:
+  result: PASS
+  evidence:
+    - "Commit 307037d contém somente story 1.56, serviço/hook/componentes/testes da Story; não contém migrations, gate, QA Results da 1.55, parser/handler da 1.55 ou AiSiteIntegrationAction."
+    - "A árvore atual mantém somente as mudanças alheias preexistentes em .claude/launch.json, vite.config.ts e .claude/settings.local.json.bak, preservadas."
+    - "Busca nos caminhos da Story não encontrou document_import_proposal_items, products, purchase_items, estoque, custo ou supplierId em chamadas; os únicos matches são textos explícitos do corte."
+
+acceptance_criteria:
+  AC1:
+    result: PASS
+    evidence: "Story 1.55 está Done; isNfeDocumentImportEligible exige categoria nota_fiscal, MIME XML e currentVersionId; testes cobrem application/xml e rejeitam PDF/imagem. O upload preserva o Document retornado e a versão usada."
+    limitation: "Não houve execução ponta a ponta contra Edge Function publicada."
+  AC2:
+    result: CONCERNS
+    evidence: "Serviço testa uma única invoke com body somente document_version_id; hook testa queued→done/review, queued→failed e retry explícito. Código acompanha queued/running e usa mutex."
+    limitation: "Não há Edge Function remota; não há prova real de job, nem teste de duplo clique/concor­rência no componente."
+  AC3:
+    result: PASS
+    evidence: "Validação em centavos, CNPJ/nome obrigatórios, quatro valores não negativos, data inválida, parcela zero, soma divergente, centavos e ausência de duplicatas estão cobertos em documentImportService.test.ts."
+  AC4:
+    result: PASS
+    evidence: "O literal do corte aparece em revisão, resumo e sucesso; o teste de modal verifica revisão/resumo e a mensagem manual de estoque no sucesso."
+  AC5:
+    result: CONCERNS
+    evidence: "Implementação não consulta/renderiza itens e a busca estática não encontra as tabelas/superfícies proibidas."
+    limitation: "O teste não usa payload com det e não instala dublês que falhem se uma query de item/produto/estoque for adicionada depois; portanto a prova negativa de regressão é insuficiente."
+  AC6:
+    result: CONCERNS
+    evidence: "Código normaliza CNPJ somente para comparação, filtra fornecedores pela empresa da sessão, distingue new/existing/conflict e nunca envia supplierId; RPC resolve/cria sob SECURITY INVOKER."
+    limitation: "Testes não cobrem diretamente new/zero matches, duplicidade real e tentativa de edição cross-tenant com resposta B."
+  AC7:
+    result: CONCERNS
+    evidence: "Botão depende de proposta pending, validação sem erros, match carregado e ausência de conflito; resumo e retorno à revisão existem no código."
+    limitation: "Teste cobre apenas estado válido e conflito; não cobre cada inválido nem preservação de edição em navegação real."
+  AC8:
+    result: CONCERNS
+    evidence: "Serviço faz preflight por tenant/status e chama uma única RPC apply_nfe_purchase_proposal com p_proposal_id; proposta applied não chama RPC novamente; falha é traduzida atomicamente."
+    limitation: "Sem ambiente autorizado não há prova da segunda chamada real, concorrência/F5 ou ausência de duplicação de fornecedor/compra/conta."
+  AC9:
+    result: CONCERNS
+    evidence: "Payload fixa payment_method=other e os caminhos da Story não fazem escrita client-side de domínio/itens/estoque; RPC local é SECURITY INVOKER e resolve fornecedor/compra/contas."
+    limitation: "Não foi possível capturar contagens/quantidades antes/depois nem confirmar fornecedor, compra e contas a pagar no banco remoto."
+  AC10:
+    result: CONCERNS
+    evidence: "requireCompanyId lê useAuthStore; leituras/updates filtram company_id e o body da Edge Function não recebe tenant."
+    limitation: "O teste existente retorna null para proposta estrangeira, mas não simula uma linha B atravessando o mock, nem cobre edição e aplicação B com sessão A."
+  AC11:
+    result: CONCERNS
+    evidence: "Códigos públicos são mapeados para mensagens seguras; falha da RPC usa a mensagem literal Nada foi gravado...; o documento original é exibido como preservado."
+    limitation: "Não há casos próprios no novo fluxo para cada rejeição nem execução que prove ausência de escrita parcial e preservação da versão original no banco."
+  AC12:
+    result: CONCERNS
+    evidence: "Modal nomeado, labels associados, foco inicial no heading, Escape, foco visível, aria-live, role=alert, classes dark: e avisos textuais estão implementados."
+    limitation: "A verificação foi estática e o teste cobre somente aria-live/texto; não há prova automatizada de teclado, foco, contraste ou claro/escuro."
+  AC13:
+    result: CONCERNS
+    evidence: "Quatro comandos foram executados separadamente antes/depois; testes e build passam, lint/typecheck mantêm os diagnósticos do baseline e lint focado é limpo."
+    limitation: "O Debug Log da Story registra npm run typecheck com exit 1, mas a medição reproduzível de Quinn retorna exit 2 em baseline e final; os 24 diagnósticos são os mesmos."
+
+top_issues:
+  - id: "INT-001"
+    severity: high
+    finding: "document-extraction não está publicada no projeto remoto; a UI chama a função em documentImportService.ts, mas a listagem remota mostrou somente seis funções ativas e nenhuma com esse slug."
+    suggested_action: "Com autorização humana específica, publicar a Edge Function e repetir o fluxo completo em ambiente seguro; não fazer isso neste gate."
+  - id: "TEST-001"
+    severity: high
+    finding: "AC8–AC11 não têm evidência autorizada de integração: atomicidade real, idempotência concorrente, RLS cross-tenant e contagens de products/purchase_items/estoque."
+    suggested_action: "Após ambiente descartável e autorização, executar cenários A/B, retry/duplo clique e snapshot antes/depois sem aplicar migration nesta rodada."
+  - id: "TEST-002"
+    severity: medium
+    finding: "Os testes de corte e isolamento não são guardas de regressão completos: não usam payload det com spies que falhem para itens/produtos/estoque e não exercitam sessão A contra dados B em leitura/edição/aplicação."
+    suggested_action: "Adicionar testes negativos de contrato antes de ampliar o piloto."
+  - id: "DOC-001"
+    severity: low
+    finding: "O Debug Log do @dev reporta exit 1 para npm run typecheck, enquanto o comando reproduz exit 2; o resultado funcional (24 diagnósticos, sem piora) permanece consistente."
+    suggested_action: "Corrigir o registro na próxima rodada de manutenção, sem alterar o veredito desta revisão."
+
+waiver:
+  active: false

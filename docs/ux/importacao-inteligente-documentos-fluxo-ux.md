@@ -181,7 +181,7 @@ O que **não** proponho: confirmação por digitação de valor ("digite R$ 4.23
 
 Dois níveis de confiança na detecção, com comportamento de interface diferente para cada um — porque tratar os dois como "duplicata" com a mesma força gera alarme falso:
 
-- **Duplicata forte** (chave de acesso da NF-e repetida, linha digitável do boleto repetida, ou combinação data+valor+descrição idêntica numa linha de extrato): banner **bloqueante** no topo da tela de revisão, cor de alerta forte, com "Ver documento anterior" (abre o já existente) e "Enviar mesmo assim" como ação explícita separada do botão principal — nunca um checkbox discreto que passa despercebido.
+- **Duplicata forte** (chave de acesso da NF-e repetida, ou combinação data+valor+descrição idêntica numa linha de extrato): banner **bloqueante** no topo da tela de revisão, cor de alerta forte, com "Ver documento anterior" (abre o já existente) e "Enviar mesmo assim" como ação explícita separada do botão principal — nunca um checkbox discreto que passa despercebido. **Exceção declarada em §12.4:** para boleto por linha digitável, esta cláusula não se aplica — não existe "Enviar mesmo assim" para essa rota, porque a chave de duplicidade é a própria trava `UNIQUE` do banco, não uma heurística de UI. Esta linha falava de "linha digitável do boleto repetida" antes de a Onda 4 existir como story; a decisão concreta, com os dois desenhos de estado, está em §12.4–§12.5.
 - **Duplicata provável** (nome do cliente/fornecedor + valor parecidos, mas não uma chave exata — típico de contrato/proposta): banner **não bloqueante**, tom "atenção" em vez de "erro": *"Isto se parece com [Proposta X, enviada em 12/03]. Ainda assim é um documento novo?"* — dispensável com um clique, sem exigir justificativa.
 
 A checagem acontece **depois** da extração (não no upload), porque a chave de comparação (chave de acesso, linha digitável, valor) só existe depois que o campo foi lido.
@@ -480,3 +480,106 @@ Não decido qual das duas vale — isso é reconciliado por Orion quando a respo
 - Não decido se o estoque entra nesta onda — arquitetura, Compass, em paralelo (§11.6 cobre as duas respostas possíveis).
 - Não decido o rótulo comercial final da feature ("Importar com Gestly") — já registrado como aberto no epic §12, sem relação com este gap.
 - Não redesenho §3.6 nem o wireframe 8.1b — só emendo a célula "Novo produto / Bloqueia Gravar?" (§11.2) e preencho as duas lacunas que a própria §3.6.5 deixou explicitamente em aberto.
+
+---
+
+## 12. Adendo (2026-08-26) — QO-6 e QO-7 da Story 1.58 (boleto por linha digitável)
+
+**Origem:** `.aiox/briefs/prism-questoes-ux-1.58.md` (Orion), a partir das nove perguntas abertas de `docs/stories/1.58.boleto-linha-digitavel.story.md` (@sm, Draft). Duas são minhas: QO-6 (editabilidade de valor/vencimento) e QO-7 (conflito entre a §5 deste documento e a trava `UNIQUE (company_id, idempotency_key)` de D8/schema). Li a story inteira antes de decidir, não só o brief.
+
+### 12.1 QO-6 — Valor e vencimento: **display-only**, e não é uma decisão de gosto
+
+**Decisão:** valor e vencimento do boleto nascem e permanecem **somente leitura** na revisão. Não entram no padrão de "chip que abre para edição ao toque" da §3.2, porque esse padrão foi desenhado para campo extraído por IA com confiança probabilística — aqui não há IA nem probabilidade envolvida.
+
+**Por que o argumento a favor de editável não vence, apesar de ser real:**
+
+O caso citado no brief — boleto pago com desconto, juros ou negociado por um valor diferente do impresso — existe e é comum na prática bancária brasileira. Mas três fatos do próprio contrato, não de preferência de design, fecham a decisão para esta rodada:
+
+1. **A garantia de identidade é o produto.** O valor e o vencimento não são "dados extraídos com incerteza" — são o resultado de uma verificação criptográfica (três DVs módulo 10 + um DV módulo 11) sobre os mesmos 47 dígitos que também formam a `idempotency_key`. A promessa da story (Objective, linha 59) é que "a conta a pagar" **é** aquele boleto. Permitir editar o valor quebra essa correspondência sem quebrar a chave — a proposta continua apontando para a linha original, mas o valor gravado deixa de ser o valor daquela linha, e nada na tela nem no banco registraria que houve divergência.
+2. **A RPC não teria como defender essa divergência.** Os Dev Notes da story confirmam que `apply_boleto_payable_proposal` não revalida os 47 dígitos nem confere o payload contra a linha (isso é exatamente a QO-8, em aberto com @architect). Se o campo virasse editável, o valor que chega na RPC seria whatever o cliente mandar, sem nenhuma segunda checagem no servidor. Isso não é "confiar no usuário" — é remover a única camada de verificação que a rota inteira foi desenhada para ter. Editável sem uma revalidação server-side seria pior do que qualquer campo de baixa confiança da §3.3, porque lá pelo menos o valor tem origem em algo (mesmo que incerto); aqui o valor editado teria a mesma aparência de "verificado" que o valor correto.
+3. **O contrato atual só tem um campo, não dois.** `payload.payable.amount`/`due_date` é o único par que existe (AC5, AC8). Uma edição responsável exigiria dois valores lado a lado — "valor da linha" (imutável, identidade) e "valor a lançar" (editável, decisão humana) — com o segundo claramente rotulado como divergente do primeiro. Isso é uma mudança de contrato (payload/RPC), não uma mudança de tela, e cai exatamente na cláusula do brief: "não improvise... isso é da @data-engineer, em migration, com autorização do usuário." Não decido essa extensão agora.
+
+**O que isso não fecha, e por quê registro:** se o uso real mostrar que boletos com desconto/negociação são frequentes (não uma exceção rara), isso deixa de ser só uma escolha de UX e vira uma decisão de produto: o sistema quer suportar "valor efetivamente pago ≠ valor do boleto" como caso de primeira classe? Se sim, o caminho certo é o par de campos do ponto 3 acima, decidido com o usuário e com contrato revisado — não um `amount` editável solto. Devolvo isso como recomendação a levar ao usuário, não como algo que decido sozinho: **a autoridade sobre valor/vencimento é 100% da linha digitável nesta rodada; qualquer exceção é decisão de produto futura, com schema próprio.**
+
+**Autoridade (resposta direta à pergunta do brief):** o parser determinístico é a única autoridade. A UI não introduz uma segunda fonte de verdade para esses dois campos.
+
+### 12.2 QO-6 — Estados, mensagens e como não parecer quebrado
+
+O risco apontado pelo brief é real: um campo permanentemente cinza/travado, sem explicação, parece bug. A diferença central de tratamento visual em relação à §3.3 é que **não uso o vocabulário de confiança** (alta/média/baixa, `CheckCircle2`/`AlertCircle`) para estes dois campos — usar esse vocabulário aqui sugeriria, incorretamente, que existe uma chance do valor estar errado por incerteza de leitura. Não existe: ou os DVs batem e o valor é matematicamente esse, ou a linha já foi rejeitada antes de chegar à revisão (AC2–AC4).
+
+| Campo | Apresentação | Ícone/rótulo | `aria-describedby` |
+|---|---|---|---|
+| Valor | Texto estático, mesmo peso visual dos demais dados confirmados, **sem** ícone de lápis, **sem** "toque para editar" | Selo distinto: "Verificado pela linha digitável" (não "confiança") | "Este valor vem do cálculo sobre os dígitos da linha digitável e não pode ser editado nesta tela." |
+| Vencimento | Idem | Idem | "Esta data vem do cálculo sobre os dígitos da linha digitável e não pode ser editada nesta tela." |
+
+Wireframe (estende a seção de revisão do boleto, mesma família visual de 8.1):
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Boleto reconhecido                                       │
+│  🔒 Verificado pela linha digitável                        │
+│  Valor          R$ 1.284,50                                │
+│  Vencimento     14/09/2026                                 │
+│  (sem lápis, sem estado "toque para editar" — texto fixo)  │
+├─────────────────────────────────────────────────────────┤
+│  Fornecedor                                                │
+│  ...(padrão de §3.2/§6 — editável normalmente)             │
+└─────────────────────────────────────────────────────────┘
+```
+
+Não proponho microcópia adicional tipo "pagou diferente? fale com o suporte" — isso seria inventar um fluxo de suporte que não foi pedido. O selo e o `aria-describedby` já respondem "por que não editável" sem sugerir um caminho alternativo inexistente.
+
+**Efeito nos ACs da story 1.58 (para @sm incorporar, não edito a story):**
+- **AC6** ganha uma exigência: valor/vencimento renderizam com o tratamento "verificado", nunca com o padrão de chip-editável de campo de IA — evita que @dev reaproveite por engano o componente de campo de confiança da Onda 3 para estes dois campos.
+- **AC7 (autosave)** deixa de estar ambíguo quanto a estes dois campos: não há edição do usuário para persistir em valor/vencimento; autosave cobre somente os campos de fornecedor. Isso reduz, não aumenta, a superfície de autosave.
+- Nenhum AC fica bloqueado por esta decisão — QO-6 estava impedindo AC6/AC7 de serem implementáveis sem ambiguidade; a partir de agora não estão.
+
+### 12.3 QO-6 — Acessibilidade
+
+Segue o padrão já fechado em §6: contraste igual ao dos demais campos "confirmados" (não uso uma cor mais apagada que sugira desabilitado — o campo não está desabilitado, é informativo), foco alcançável por tab (é conteúdo, não controle — um leitor de tela deve anunciá-lo como texto com a descrição do `aria-describedby`, não como um campo de formulário inerte), e nenhuma informação carregada só pelo ícone de cadeado — o rótulo textual "Verificado pela linha digitável" está sempre visível, o ícone é reforço, não substituto.
+
+### 12.4 QO-7 — Duplicata de boleto: **bloqueio definitivo**, sem override nesta rodada
+
+**Decisão:** para a rota de linha digitável, boleto duplicado (mesma chave, mesma empresa) **não tem bypass**. A §5 deste documento propôs "Enviar mesmo assim" para duplicata forte citando a linha digitável antes de a Onda 4 existir como story com schema decidido; a decisão concreta, agora que D8/schema estão à vista, é que essa cláusula **não se aplica ao boleto**.
+
+**Conferi a §5 por conta própria antes de decidir** — Orion pediu desconfiança explícita (brief, §7). O texto original dizia: "Duplicata forte (chave de acesso da NF-e repetida, linha digitável do boleto repetida, ...)". Não é uma leitura larga nem estreita da Orion: a §5 realmente propõe "Enviar mesmo assim" para os três casos, incluindo boleto, no mesmo nível. O conflito é real, não um mal-entendido de leitura.
+
+**Por que bloqueio, não override:**
+
+1. **A chave não é um índice de conveniência, é a identidade do boleto.** A linha digitável de 47 dígitos com DVs válidos identifica uma cobrança bancária específica de forma praticamente única — diferente de "nome + valor parecidos" (duplicata provável, §5, que continua válida como está). Duas submissões da mesma linha, na mesma empresa, são, na prática, quase sempre o mesmo boleto sendo lançado duas vezes, não um falso positivo que mereça um botão de "não, sei o que estou fazendo".
+2. **Não existe onde um "sim" auditável seria gravado.** Um override auditável de verdade precisaria de um lugar para registrar "usuário decidiu duplicar mesmo assim, em [quando], por [motivo]" — e uma linha que não colide com a chave única para a segunda ocorrência poder existir ao lado da primeira. Nenhum dos dois existe no contrato atual, e o brief é explícito: não invento uma chave alternativa. Sem os dois, "Enviar mesmo assim" para boleto seria um botão que promete uma ação que o banco vai rejeitar — pior do que não ter o botão, porque quebra a confiança da tela em todos os outros lugares onde ela promete algo que de fato acontece.
+3. **O banco já é a autoridade final, então a tela só precisa comunicar isso bem, não decidir de novo.** É consistente com o restante do desenho: em nenhum lugar deste documento a UI tenta ser mais permissiva que a trava que a sustenta (ex.: fornecedor obrigatório em §3.6 respeita o que a RPC exige, não tenta contornar).
+
+**Se o usuário achar isso restritivo demais na prática** (ex.: dois boletos genuinamente diferentes que colidem por algum motivo eu não previ, ou a necessidade real de reemitir/relançar), a saída correta não é um bypass de UI — é @architect avaliar se o desenho de chave está certo, e, se não, uma migration decidida e autorizada por ele. Devolvo isso como algo que só o usuário decide **se e quando aparecer na prática**; não vejo motivo para escalar antecipadamente sem um caso real.
+
+### 12.5 QO-7 — Estados e mensagens
+
+A chave colide de formas diferentes dependendo do status da proposta existente — só uma delas é "duplicata" no sentido que preocupa o brief. Distingo as três:
+
+| Estado | Quando ocorre | Tela mostra | Bloqueia? | `aria-live` |
+|---|---|---|---|---|
+| **Revisão em andamento** | Já existe proposta `pending` com a mesma chave/empresa (o usuário está retomando, não duplicando) | Não é banner de duplicata. Mensagem neutra: "Você já começou a importar este boleto. Continuando de onde parou." Carrega os campos já salvos (autosave, §11.3/AC7) | Não — é o caminho normal de retomada (AC7) | `polite` |
+| **Boleto já importado** | Já existe proposta `applied` com a mesma chave/empresa | Banner bloqueante, mesmo peso visual de uma duplicata forte de §5, **sem** "Enviar mesmo assim": "Este boleto já foi importado como conta a pagar em [data da aplicação]. [Ver conta a pagar]" | Sim, definitivo — "Gravar" nunca habilita para esta entrada | `polite`, foco movido para o banner ao detectar |
+| **Tentativa anterior rejeitada/expirada** | Já existe proposta `rejected`/`expired` com a mesma chave/empresa | **Não decido a mensagem final aqui — depende de uma resposta que não tenho.** Ver §12.7. | Depende da resposta de @architect | — |
+
+O terceiro estado é o motivo de eu não fechar esta seção 100%: a `UNIQUE (company_id, idempotency_key)` do schema, pelo que a story documenta, não parece ser parcial (não vi filtro por `status` na descrição de D8/schema lida pelo @sm). Se for uma constraint incondicional, uma proposta `rejected` ou `expired` ocupa a chave **para sempre** — e uma nova tentativa de importar o mesmo boleto (válido, nunca aplicado) ficaria permanentemente impossível, o que não é "duplicata", é um beco sem saída de produto. Não invento a resposta; declaro a dependência abaixo.
+
+### 12.6 QO-7 — Efeito nos ACs e nos riscos da story 1.58
+
+- **Risks & Mitigations, linha "UX de duplicidade contraditória com a trava única":** resolvida. Não haverá bypass de "Enviar mesmo assim" para boleto nesta ou em nenhuma rodada futura sem uma migration de chave decidida à parte; a linha pode ser fechada como "sem bypass; ver UX §12.4".
+- **AC5:** o comportamento "barrada... sem criar uma segunda proposta" ganha desenho de tela — estados "Revisão em andamento" e "Boleto já importado" acima.
+- **AC9 (mensagens seguras de falha):** a mensagem de "proposta não pendente" já prevista no AC tem agora o texto e o link concretos do estado "Boleto já importado".
+- **AC11 (mensagens/acessibilidade):** confirma que a rota de boleto nunca oferece uma ação que a trava do banco vai rejeitar — nenhuma mensagem promete "enviar mesmo assim".
+- **DoD:** QO-7 fica "decisão registrada" para o efeito de bloqueio; o terceiro estado (§12.5) permanece uma pergunta aberta nova e pequena, não uma reabertura da QO-7 inteira — ver §12.7.
+
+### 12.7 Dependências e riscos declarados para outros agentes
+
+- **@architect (as seis QOs técnicas, em paralelo):** preciso de resposta sobre se `rejected`/`expired` libera a chave `idempotency_key` para reuso ou se a constraint é incondicional. Se incondicional, isso não é mais uma pergunta de UX — é um risco de produto novo que não estava nas nove QOs da story (um boleto genuinamente nunca lançado pode ficar permanentemente irrecuperável após uma expiração), e recomendo ao Orion registrar como décima pergunta para @sm/@po, não como parte da minha QO-7. Não proponho eu mesma um índice parcial — é decisão de @data-engineer/@architect, com autorização do usuário se exigir migration.
+- **QO-1 (superfície de entrada):** meu desenho de §12.5 assume que a checagem de chave acontece contra propostas já existentes por `company_id + idempotency_key`, independente de a linha entrar com ou sem arquivo associado. Se a resposta da QO-1 mudar como/quando a proposta é criada (por exemplo, se a checagem só puder ocorrer depois de um upload que hoje não existiria sem arquivo), os três estados continuam válidos conceitualmente, mas o momento em que aparecem na jornada pode mudar. Declaro a dependência; não presumo a resposta.
+- **QO-2 (normalização):** meus três estados comparam "a mesma chave" — a chave só é estável se a normalização for uma função determinística e fixa da linha colada/digitada. Nenhum desenho aqui muda com a resposta, mas ela precisa existir antes de os três estados serem testáveis.
+
+### 12.8 Fora deste adendo
+
+- Não decido se existirá algum dia um par "valor da linha × valor a lançar" para boleto com desconto/negociação (§12.1) — registro como decisão de produto futura, não como algo que falta a este adendo.
+- Não decido o comportamento de `rejected`/`expired` colidindo com a chave (§12.5/§12.7) — depende de @architect.
+- Não toco na story, no ADR, em schema/migration nem em nenhuma tabela de produção. Este adendo é só o documento de UX.

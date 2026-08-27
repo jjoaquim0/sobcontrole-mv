@@ -348,3 +348,41 @@ deriva a versão do momento da chamada. Duas consequências práticas:
    mesmo relatório de verificação pós-aplicação, comparar a versão registrada contra o nome do
    arquivo — igual ao que já é pedido para `NOT EXISTS`/contagens de domínio — e sinalizar
    divergência de imediato, em vez de assumir que bateu.
+
+## 11. Estado real do banco ao fim de 2026-08-26
+
+Registro de memória do projeto — o usuário vai limpar as sessões, e o que não estiver em disco se
+perde. Números medidos nesta sessão, por leitura, no projeto `qxcchymwswontqcwqogm`, depois das três
+aplicações do dia — não copiados de relatório anterior.
+
+### Migrations aplicadas hoje (as três, uma de cada vez, com autorização explícita do usuário)
+
+| Migration (arquivo, já reconciliado) | Versão registrada (`list_migrations`) | Efeito, em linguagem de negócio |
+|---|---|---|
+| `20260826230250_apply_nfe_purchase_proposal_tenant_check.sql` (SEC-001) | `20260826230250` | Aplicar uma proposta de NF-e agora **recusa a importação inteira** se algum item estiver vinculado a um produto de outra empresa — fecha o vetor por onde um vínculo indevido entrava silenciosamente em `purchase_items` sem checagem de dono. |
+| `20260827020502_document_import_proposals_partial_unique_index.sql` (D18, Story 1.59) | `20260827020502` | Um documento (nota ou boleto) cuja importação foi **rejeitada ou expirou** pode ser reenviado depois — deixa de ficar preso para sempre por uma chave morta; uma importação **já concluída** (aplicada) continua bloqueando reenvio duplicado. |
+| `20260827020610_apply_boleto_payable_proposal_line_defense.sql` (D16 + D19, Story 1.58) | `20260827020610` | Confirmar um boleto agora **recusa a operação** se o valor ou o vencimento não corresponderem à linha digitável do próprio boleto (incluindo a era correta do vencimento) — fecha a brecha por onde um valor financeiro adulterado entraria numa conta a pagar real. |
+
+`20260814101500` (dimensão de quota da Onda 6) **continua NÃO aplicada e NÃO autorizada** —
+reconferido nesta sessão, ausente de `list_migrations`. Nenhum `db push` foi executado hoje; nada a
+tocou de carona.
+
+### Verificação independente, nesta sessão, antes de escrever esta seção
+
+- `list_migrations` (39 entradas): as três versões acima presentes, exatamente como na tabela;
+  `20260814101500` ausente.
+- `pg_indexes` de `document_import_proposals`: `document_import_proposals_company_id_idempotency_key_key`
+  é hoje um índice único **parcial**, `WHERE (status = ANY (ARRAY['pending'::text, 'applied'::text]))` —
+  não mais a constraint incondicional.
+- Contagens de domínio: `products=2, purchases=3, purchase_items=3, suppliers=2, account_payables=3,
+  document_import_proposals=0`. Nenhuma das três aplicações de hoje alterou dado nenhum — as três são
+  `CREATE OR REPLACE FUNCTION`/`DROP+CREATE INDEX`, sem DML.
+
+### O que falta, para quem retomar amanhã sem o contexto desta sessão
+
+- As três migrations de hoje têm rollback pareado em `supabase/rollbacks/`, com os mesmos nomes
+  reconciliados acima. Reverter qualquer uma exige autorização própria do usuário — nenhuma foi
+  revertida.
+- `20260814101500` segue como pendência separada, sem relação com o trabalho de hoje.
+- A Story 1.58 (boleto) ainda não foi implementada pelo `@dev` — D16/D18/D19 eram pré-condição de
+  segurança da RPC, não a entrega da rota em si.

@@ -176,6 +176,13 @@ export interface DocumentUploadInput {
   related?: { relatedType: DocumentRelatedType; relatedId: string };
 }
 
+export interface SyntheticDocumentInput {
+  name: string;
+  category: DocumentCategory;
+  content: string;
+  mimeType: 'text/xml' | 'application/xml';
+}
+
 export interface DocumentUpdateInput {
   name?: string;
   description?: string | null;
@@ -334,6 +341,47 @@ export const uploadDocument = async (file: File, input: DocumentUploadInput): Pr
     p_storage_path: storagePath,
     p_mime_type: file.type,
     p_size: file.size,
+    p_created_by: userId,
+  });
+
+  if (createError) {
+    await supabase.storage.from(DOCUMENT_BUCKET).remove([storagePath]);
+    throw createError;
+  }
+
+  return getDocumentById(documentId);
+};
+
+export const createSyntheticDocument = async (input: SyntheticDocumentInput): Promise<Document> => {
+  const name = input.name.trim();
+  if (!name || !input.content.trim()) throw new Error('Documento sintético inválido.');
+
+  const companyId = getCompanyId();
+  const userId = getCurrentUserId();
+  const documentId = crypto.randomUUID();
+  const versionId = crypto.randomUUID();
+  const blob = new Blob([input.content], { type: input.mimeType });
+  const storagePath = createImmutableDocumentPath(companyId, documentId, versionId, name);
+
+  const { error: uploadError } = await supabase.storage.from(DOCUMENT_BUCKET).upload(storagePath, blob, {
+    upsert: false,
+    contentType: input.mimeType,
+  });
+  if (uploadError) throw uploadError;
+
+  const { error: createError } = await supabase.rpc('create_document_with_initial_version', {
+    p_document_id: documentId,
+    p_version_id: versionId,
+    p_name: name,
+    p_original_name: name,
+    p_category: input.category,
+    p_visibility: 'private',
+    p_description: null,
+    p_related_type: null,
+    p_related_id: null,
+    p_storage_path: storagePath,
+    p_mime_type: input.mimeType,
+    p_size: blob.size,
     p_created_by: userId,
   });
 

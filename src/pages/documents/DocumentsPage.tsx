@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Eye, FileStack, HardDrive, LockKeyhole, TrendingUp, Upload } from 'lucide-react';
+import { AlertCircle, Eye, FileDigit, FileStack, HardDrive, LockKeyhole, TrendingUp, Upload } from 'lucide-react';
 import { PageHeader } from '../../components/shared/PageHeader';
 import { StatCard } from '../../components/shared/StatCard';
 import { DataTable, Column } from '../../components/shared/DataTable';
@@ -14,6 +14,7 @@ import { DocumentGrid } from './components/DocumentGrid';
 import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 import { DocumentUploadModal } from './components/DocumentUploadModal';
 import { CategoryIcon } from './components/CategoryIcon';
+import { BoletoImportModal } from './components/BoletoImportModal';
 
 export const DocumentsPage: React.FC = () => {
   const profile = useAuthStore((state) => state.profile);
@@ -30,6 +31,7 @@ export const DocumentsPage: React.FC = () => {
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'size' | 'updated'>('recent');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isBoletoModalOpen, setIsBoletoModalOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document>();
   const { data: users = [] } = useDocumentCompanyUsers();
 
@@ -89,7 +91,7 @@ export const DocumentsPage: React.FC = () => {
       <PageHeader
         title="Documentos"
         subtitle="Biblioteca privada, versionada e organizada da sua empresa"
-        action={<button type="button" onClick={() => setIsUploadModalOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-[#10b981] px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-500/10 transition-colors hover:bg-[#059669]"><Upload className="w-4.5 h-4.5" />Enviar documentos</button>}
+        action={<><button type="button" onClick={() => setIsBoletoModalOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-[#0B2551] px-4 py-2 text-sm font-semibold text-[#0B2551] transition-colors hover:bg-blue-50 dark:border-cyan-300 dark:text-cyan-200 dark:hover:bg-cyan-950/30"><FileDigit className="h-4 w-4" />Importar boleto</button><button type="button" onClick={() => setIsUploadModalOpen(true)} className="flex items-center gap-1.5 rounded-xl bg-[#10b981] px-4 py-2 text-sm font-semibold text-white shadow-md shadow-emerald-500/10 transition-colors hover:bg-[#059669]"><Upload className="w-4.5 h-4.5" />Enviar documentos</button></>}
       />
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <StatCard title="Documentos acessíveis" value={isStatsLoading ? '...' : stats?.totalDocuments ?? 0} icon={<FileStack className="w-5 h-5" />} accentColor="blue" />
@@ -99,6 +101,7 @@ export const DocumentsPage: React.FC = () => {
       <DocumentFilters searchInput={searchInput} onSearchChange={setSearchInput} categoryFilter={categoryFilter} onCategoryChange={setCategoryFilter} statusFilter={statusFilter} onStatusChange={setStatusFilter} mimeTypeFilter={mimeTypeFilter} onMimeTypeChange={setMimeTypeFilter} visibilityFilter={visibilityFilter} onVisibilityChange={setVisibilityFilter} uploadedByFilter={uploadedByFilter} onUploadedByChange={setUploadedByFilter} relatedTypeFilter={relatedTypeFilter} onRelatedTypeChange={setRelatedTypeFilter} dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} sortBy={sortBy} onSortByChange={setSortBy} users={users} canViewDeleted={canViewDeleted} viewMode={viewMode} onViewModeChange={setViewMode} isFiltered={isFiltered} onClearFilters={clearFilters} />
       {isError ? <section className="flex flex-col items-center justify-center rounded-2xl border border-gray-100 bg-white p-10 text-center shadow-sm dark:border-white/5 dark:bg-[#1a1d27]"><AlertCircle className="mb-4 h-8 w-8 text-red-500" /><h2 className="text-lg font-semibold text-gray-800 dark:text-gray-200">Não foi possível carregar os documentos</h2><p className="mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">Sua sessão pode não ter acesso a esta biblioteca ou ocorreu uma falha de conexão.</p><button type="button" onClick={() => refetch()} className="mt-5 rounded-xl bg-red-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-red-600">Tentar novamente</button></section> : viewMode === 'grid' ? <DocumentGrid documents={documents} isLoading={isLoading} onView={setSelectedDocument} isFiltered={isFiltered} /> : <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm dark:border-white/5 dark:bg-[#1a1d27]"><DataTable data={documents} columns={columns} isLoading={isLoading} emptyIcon={<FileStack className="mb-3 h-12 w-12 text-[#10b981]" />} emptyTitle="Nenhum documento encontrado" emptySubtitle={isFiltered ? 'Ajuste os filtros para ampliar a busca.' : 'Envie o primeiro documento da sua empresa.'} /></div>}
       <DocumentUploadModal isOpen={isUploadModalOpen} onClose={() => setIsUploadModalOpen(false)} onUpload={handleUpload} isLoading={isUploading} />
+      <BoletoImportModal isOpen={isBoletoModalOpen} onClose={() => setIsBoletoModalOpen(false)} />
       <DocumentPreviewModal isOpen={Boolean(selectedDocument)} onClose={() => setSelectedDocument(undefined)} document={selectedDocument} />
     </div>
   );

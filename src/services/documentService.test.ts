@@ -36,7 +36,7 @@ vi.mock('../store/authStore', () => ({
   },
 }));
 
-import { getDocumentDownloadUrl, uploadDocument } from './documentService';
+import { createSyntheticDocument, getDocumentDownloadUrl, uploadDocument } from './documentService';
 
 const dbDocument = {
   id: '33333333-3333-4333-8333-333333333333',
@@ -85,5 +85,29 @@ describe('documentService — upload e URLs temporárias', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('record_document_download', { p_document_id: dbDocument.id });
     expect(mocks.storageCreateSignedUrl).toHaveBeenCalledWith(dbDocument.storage_path, 60);
     expect(url).toBe('https://signed.example/document');
+  });
+
+  it('cria documento sintético privado pelo mesmo Storage/RPC versionado do upload', async () => {
+    await createSyntheticDocument({
+      name: 'boleto-linha-digitavel.xml',
+      category: 'boleto',
+      content: '00190000090001234000605678901231599260000025000',
+      mimeType: 'application/xml',
+    });
+
+    expect(mocks.storageUpload).toHaveBeenCalledWith(expect.stringMatching(/^11111111-1111-4111-8111-111111111111\/[\w-]+\/[\w-]+\/boleto-linha-digitavel\.xml$/), expect.any(Blob), expect.objectContaining({ upsert: false, contentType: 'application/xml' }));
+    expect(mocks.rpc).toHaveBeenCalledWith('create_document_with_initial_version', expect.objectContaining({ p_category: 'boleto', p_visibility: 'private', p_original_name: 'boleto-linha-digitavel.xml', p_mime_type: 'application/xml' }));
+  });
+
+  it('remove o blob sintético se o registro versionado falhar', async () => {
+    mocks.rpc.mockResolvedValue({ error: new Error('database failure') });
+
+    await expect(createSyntheticDocument({
+      name: 'boleto-linha-digitavel.xml',
+      category: 'boleto',
+      content: '00190000090001234000605678901231599260000025000',
+      mimeType: 'application/xml',
+    })).rejects.toThrow('database failure');
+    expect(mocks.storageRemove).toHaveBeenCalledWith([expect.stringMatching(/^11111111-1111-4111-8111-111111111111\//)]);
   });
 });

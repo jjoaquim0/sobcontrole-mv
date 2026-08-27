@@ -203,6 +203,14 @@ const createDependencies = (): DocumentExtractionDependencies | null => {
         .eq('company_id', companyId);
       if (error) throw createPersistenceError(error.code);
     },
+    setDocumentSource: async (documentId, companyId, source) => {
+      const { error } = await serviceClient
+        .from('documents')
+        .update({ source })
+        .eq('id', documentId)
+        .eq('company_id', companyId);
+      if (error) throw createPersistenceError(error.code);
+    },
     waitUntil: (task) => EdgeRuntime.waitUntil(task),
     logger: (event) => console.log(JSON.stringify(event)),
   };

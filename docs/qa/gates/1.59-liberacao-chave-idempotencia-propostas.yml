@@ -1,0 +1,148 @@
+schema: 1
+story: "1.59"
+gate: CONCERNS
+status_reason: >-
+  A migration D18 e o rollback pareado estão estruturalmente coerentes, o índice parcial real foi
+  confirmado por leitura em produção, os testes locais passam e não há regressão atribuível aos
+  arquivos tocados. O gate permanece CONCERNS, e não PASS, porque os ACs 1–4 afirmam efeitos de
+  inserção/conflito no PostgreSQL e a infraestrutura local não possui Postgres executável; produção
+  tem dados reais e não pode receber escrita. O contrato textual é falsificável, mas não é E2E. O
+  boleto ainda não existe e permanece dependente da Story 1.58. CONCERNS é aprovável conforme o ciclo
+  de vida; por isso a story foi regularizada de InProgress para Done. O handoff intermediário
+  InProgress → InReview não foi registrado pelo @dev e não é tratado como se tivesse ocorrido.
+reviewer: "Quinn"
+updated: "2026-08-27"
+transition: "InProgress -> Done"
+
+user_decisions:
+  - "2026-08-26: o usuário recusou criar ambiente Supabase descartável nesta rodada por custo; essa recusa não é permanente."
+  - "2026-08-27: o usuário determinou que o gate permanecesse sob decisão independente de QA; o veredito CONCERNS foi mantido sem pressão para PASS."
+  - "2026-08-27: produção deve ser somente-leitura para este gate; nenhuma migration, deploy, DDL/DML, cenário de teste, push, PR ou CodeRabbit foi autorizado."
+
+preconditions:
+  result: PASS
+  verified_at: "2026-08-27"
+  operation: "Somente leitura no Supabase e inspeção local; nenhuma migration, DDL, DML, RPC de aplicação, deploy, cenário mutável ou CodeRabbit foi executado pelo @qa."
+  evidence:
+    - "O commit 1055210 contém exatamente os quatro caminhos esperados: a story e os três testes; migrations, rollbacks, Stories 1.55/1.56/1.57, .claude/launch.json e vite.config.ts ficaram fora dele."
+    - "execute_sql somente-leitura em pg_indexes confirmou o índice UNIQUE composto com predicado status = ANY (ARRAY['pending', 'applied']) em public.document_import_proposals."
+    - "list_migrations somente-leitura registra 20260827020502 document_import_proposals_partial_unique_index."
+    - "package.json/package-lock.json/node_modules não possuem pg, @electric-sql/pglite ou testcontainers; psql, Supabase CLI e Docker não estão disponíveis localmente."
+    - "O contrato da migration e do rollback passa; mutações em memória da mesma asserção produziram original PASS, remoção de applied FAIL, inclusão de rejected FAIL e quebra da chave composta FAIL."
+  limitation: "O banco qxcchymwswontqcwqogm é produção com dados reais; o índice e o histórico foram apenas lidos, sem criação, alteração ou limpeza de cenários."
+
+baseline:
+  source: "Dev Agent Record da Story 1.59, antes da implementação"
+  measured_at: "2026-08-27"
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas globais: 276 erros e 2 warnings, preexistentes e fora dos arquivos da story."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 1
+    result: "24 diagnósticos TypeScript preexistentes, nenhum nos arquivos da story."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "66 arquivos e 592 testes aprovados."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "3005 módulos transformados; warning preexistente de chunk acima de 500 kB."
+
+final:
+  measured_by: "@qa, comandos executados separadamente em 2026-08-27"
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas globais: 276 erros e 2 warnings; mesmos diagnósticos do baseline, sem erro nos arquivos tocados."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 1
+    result: "24 diagnósticos preexistentes, nenhum nos arquivos da story. Esta execução retornou exit 1; o exit 2 medido em outra shell é divergência de código de saída, não de diagnóstico."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "67 arquivos e 595 testes aprovados."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "3005 módulos transformados; mesmo warning informativo de chunk acima de 500 kB."
+
+focused:
+  lint:
+    command: "npx eslint src/services/documentImportProposalsMigration.test.ts src/services/documentExtractionSecurity.test.ts src/services/documentImportService.test.ts --report-unused-disable-directives --max-warnings 0"
+    exit_code: 0
+    result: "0 erros e 0 warnings."
+  tests:
+    command: "npx vitest run src/services/documentImportProposalsMigration.test.ts src/services/documentExtractionSecurity.test.ts src/services/documentImportService.test.ts"
+    exit_code: 0
+    result: "3 arquivos e 35 testes aprovados."
+  contract_mutations:
+    result: PASS
+    evidence:
+      - "Migration original: PASS."
+      - "Remoção de applied do predicado: FAIL."
+      - "Inclusão de rejected no predicado: FAIL."
+      - "Quebra da chave composta company_id/idempotency_key: FAIL."
+    limitation: "As mutações demonstram falsificabilidade do contrato textual, não comportamento de inserção no PostgreSQL."
+  coderabbit: "Não executado: proibido pelo usuário por transmitir código a serviço externo."
+  production_writes: "Nenhuma escrita executada pelo @qa; apenas pg_indexes/list_migrations foram consultados."
+
+remote_database:
+  operation: "Supabase execute_sql/list_migrations, somente leitura"
+  result: "O índice document_import_proposals_company_id_idempotency_key_key é UNIQUE em (company_id, idempotency_key) e possui predicado somente para pending/applied; a versão 20260827020502 está registrada."
+
+acceptance_criteria:
+  AC1:
+    result: CONCERNS
+    evidence: "O contrato exclui rejected; não houve segunda inserção real após uma proposta rejeitada."
+    limitation: "Sem E2E PostgreSQL, não é possível afirmar que a chave é aceita pelo índice em runtime."
+  AC2:
+    result: CONCERNS
+    evidence: "O contrato exclui expired; não houve segunda inserção real após uma proposta expirada."
+    limitation: "Sem E2E PostgreSQL, não é possível afirmar que a chave é aceita pelo índice em runtime."
+  AC3:
+    result: CONCERNS
+    evidence: "O contrato exige pending e applied; mutações que removem applied ou incluem rejected falham, e a chave composta é verificada."
+    limitation: "Não houve tentativa real de segunda proposta/aplicação bloqueada pelo índice."
+  AC4:
+    result: CONCERNS
+    evidence: "O índice mantém company_id na chave e o teste do handler propaga a empresa autorizada com a mesma chave."
+    limitation: "Não houve exercício de isolamento, bloqueio ou ausência de leitura cruzada entre empresas no banco."
+  AC5:
+    result: CONCERNS
+    evidence: "O tratamento de 23505 continua mapeando para duplicate_nfe, falha o job e mantém a mensagem sem bypass ou chave alternativa."
+    limitation: "Não houve colisão real originada pelo banco nem reimportação após rejected/expired; somente NF-e tem fluxo implementado."
+  AC6:
+    result: CONCERNS
+    evidence: "Migration e rollback pareados passam no contrato estático; o rollback documenta o risco de 23505 quando propostas mortas duplicadas já existem e exige consulta prévia."
+    limitation: "Rollback não foi executado; a migration ainda contém referência comentada obsoleta a 20260826180000, embora os arquivos e a versão registrada sejam 20260827020502."
+
+resolved_issues: []
+
+top_issues:
+  - id: "TEST-004"
+    severity: medium
+    status: accepted_concern
+    finding: "ACs 1–4 e o caminho completo do AC5 continuam sem prova E2E de inserção, conflito, reimportação e isolamento no PostgreSQL."
+    suggested_action: "Em rodada futura, usar ambiente PostgreSQL não produtivo autorizado e executar a matriz rejected/expired/pending/applied por empresa; não usar produção."
+  - id: "TEST-005"
+    severity: medium
+    status: dependency_open
+    finding: "A exigência cross-category inclui boleto, mas a rota de boleto ainda pertence à Story 1.58 e não existe nesta story."
+    suggested_action: "Cobrir o contrato de boleto quando a Story 1.58 entregar o fluxo, sem inventar cobertura nesta rodada."
+  - id: "DOC-003"
+    severity: low
+    status: open
+    finding: "O comentário da migration D18 aponta para o rollback 20260826180000, enquanto o par reconciliado é 20260827020502."
+    suggested_action: "Encaminhar à @data-engineer para correção documental autorizada; não editar migration/rollback neste gate."
+  - id: "OPS-001"
+    severity: low
+    status: documented_condition
+    finding: "O rollback pode falhar com 23505 se a migration já tiver permitido duas propostas rejected/expired com a mesma chave na mesma empresa."
+    suggested_action: "Executar a consulta preventiva registrada no rollback antes de qualquer reversão futura e decidir o tratamento dos dados antes do rollback."
+
+waiver:
+  active: false

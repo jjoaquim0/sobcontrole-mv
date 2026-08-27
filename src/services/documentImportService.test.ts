@@ -320,7 +320,9 @@ describe('documentImportService — contratos de extração e validação', () =
     expect(getDocumentImportErrorMessage('nfe_cnpj_suspeito')).toContain('CNPJs');
     expect(getDocumentImportErrorMessage('nfe_xml_malformed')).toContain('validado');
     expect(getDocumentImportErrorMessage('nfe_access_key_invalid')).toContain('chave');
-    expect(getDocumentImportErrorMessage('duplicate_nfe')).toContain('já possui');
+    const duplicateMessage = getDocumentImportErrorMessage('duplicate_nfe');
+    expect(duplicateMessage).toBe('Esta NF-e já possui uma proposta para esta empresa.');
+    expect(duplicateMessage).not.toMatch(/Enviar mesmo assim|chave alternativa|operação será realizada/i);
     expect(getDocumentImportErrorMessage('unknown_raw_sql')).toBe('Não foi possível processar o documento.');
 
     const base = { category: 'nota_fiscal' as const, currentVersionId: 'version-1' };

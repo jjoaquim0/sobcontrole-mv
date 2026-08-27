@@ -182,6 +182,37 @@ describe('document-extraction handler security and persistence boundary', () => 
     expect(JSON.stringify((deps.logger as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(RECIPIENT);
   });
 
+  it('propagates the authorized tenant with the same key across independent executions', async () => {
+    const first = createDeps();
+    const second = createDeps({
+      resolveDocument: vi.fn(async () => createDocument({
+        companyId: 'company-b',
+        storagePath: 'private/company-b/document-b.xml',
+      })),
+    });
+
+    const firstResponse = await createDocumentExtractionHandler(first.deps)(
+      createRequest({ document_version_id: VERSION_ID }),
+    );
+    const secondResponse = await createDocumentExtractionHandler(second.deps)(
+      createRequest({ document_version_id: VERSION_ID }),
+    );
+
+    expect(firstResponse.status).toBe(202);
+    expect(secondResponse.status).toBe(202);
+    await runBackgroundTask(first.tasks);
+    await runBackgroundTask(second.tasks);
+
+    expect((first.deps.createProposal as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual(expect.objectContaining({
+      company_id: COMPANY_ID,
+      idempotency_key: ACCESS_KEY,
+    }));
+    expect((second.deps.createProposal as ReturnType<typeof vi.fn>).mock.calls[0][0]).toEqual(expect.objectContaining({
+      company_id: 'company-b',
+      idempotency_key: ACCESS_KEY,
+    }));
+  });
+
   it('persists deterministic items only after document authorization and preserves their order', async () => {
     const { deps, tasks } = createDeps({
       resolveDocument: vi.fn(async () => createDocument({ readXml: vi.fn(async () => VALID_XML_WITH_ITEMS) })),
@@ -257,6 +288,12 @@ describe('document-extraction handler security and persistence boundary', () => 
     await runBackgroundTask(tasks);
     expect(deps.markJobFailed).toHaveBeenCalledWith(JOB_ID, COMPANY_ID, 'duplicate_nfe');
     expect(deps.markJobDone).not.toHaveBeenCalled();
+    expect(deps.createProposal).toHaveBeenCalledWith(expect.objectContaining({
+      company_id: COMPANY_ID,
+      document_category: 'nota_fiscal',
+      status: 'pending',
+      idempotency_key: ACCESS_KEY,
+    }));
   });
 
   it('sanitizes unexpected read failures and never logs the source error', async () => {

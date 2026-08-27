@@ -743,10 +743,11 @@ digitável)
 Decisão sobre as questões técnicas que o `@sm` deixou abertas em
 `docs/stories/1.58.boleto-linha-digitavel.story.md` (Draft, Onda 4), a pedido do `@aiox-master` em
 `.aiox/briefs/compass-questoes-abertas-1.58.md`, mais QO-10 — achado da `@ux-design-expert` (Uma)
-durante a conciliação de QO-6/QO-7, trazido de volta a mim por não ser decisão de UX. QO-5 (escopo de
-negócio), QO-6 e QO-7 (UX) não são deste adendo — ver seção própria e a atualização em D16 abaixo.
-Nenhuma escrita em produção; as únicas consultas ao banco foram `SELECT` em `information_schema` e
-`pg_catalog` (grants, colunas, constraints e índices). Não editei a story.
+durante a conciliação de QO-6/QO-7, trazido de volta a mim por não ser decisão de UX — e, mais adiante
+(D19), uma lacuna na própria D14 que o `@aiox-master` encontrou revisando a migration de D16 antes de
+ela ser aplicada. QO-5 (escopo de negócio), QO-6 e QO-7 (UX) não são deste adendo — ver seção própria e
+a atualização em D16 abaixo. Nenhuma escrita em produção; as únicas consultas ao banco foram `SELECT`
+em `information_schema` e `pg_catalog` (grants, colunas, constraints e índices). Não editei a story.
 
 ### O que verifiquei, linha a linha
 
@@ -1133,17 +1134,110 @@ só a 1.58 ainda em Draft), talvez valha registrar como achado de acompanhamento
 `Done`, não só como pré-condição da 1.58 — a decisão de como tratar isso nas stories já fechadas não é
 minha; só nomeio o alcance para você não sequenciar como se fosse boleto-only.
 
+### D19 — lacuna na D14: a regra de desambiguação de era do fator de vencimento
+
+**Achado seu, na revisão da migration de D16. Correção de lacuna, não de erro — concordo com o
+enquadramento.** D14 documentou as duas fórmulas (era original, era reiniciada) e disse explicitamente
+"nenhuma fórmula serve para as duas eras" — mas parou aí. Faltava a regra: dado um fator de 4 dígitos
+isolado, sem mais nenhuma informação na linha que diga a que era ele pertence, como decidir qual data é
+a real. Essa lacuna existia nos dois lugares que vão implementar D14 — o parser (`@dev`) e, depois de
+D16, a própria RPC — e como ninguém tinha escrito a regra, a `@data-engineer` fez exatamente o certo ao
+não inventar uma: aceitou as duas, o que reabre R8 pela porta que a própria defesa deixou aberta.
+Confirmo o cálculo que você trouxe com as fixtures oficiais da D14 (recalculado nesta sessão, mesmo
+script, mesma data-base 07/10/1997 e mesma data de reinício 22/02/2025 já verificadas em D14):
+
+| Fixture | Fator | Era original | Era reiniciada | Correta |
+|---|---|---|---|---|
+| A | 9926 | 2024-12-10 | 2049-08-01 | original |
+| B | 1021 | 2000-07-24 | 2025-03-15 | reiniciada |
+
+**Por que a lacuna é estrutural, não um detalhe que escapou:** para *qualquer* fator de 4 dígitos, a
+diferença entre a data-era-original e a data-era-reiniciada é **exatamente 9000 dias (~24,64 anos)** —
+constante, a mesma para todo fator de 1000 a 9999, porque as duas fórmulas são a mesma soma de dias
+com bases diferentes (`data-base + fator` contra `22/02/2025 + (fator−1000)`; a diferença entre as
+duas bases é fixa, então a diferença entre os resultados também é). Verifiquei isso calculando os dois
+extremos do intervalo (fator 1000 e fator 9999): os 9000 dias batem nos dois. **A linha não contém
+informação nenhuma que diga a que era um fator pertence** — isso não é uma lacuna de pesquisa minha,
+é uma propriedade do próprio desenho FEBRABAN: o fator é só um contador de dias com reinício
+periódico, sem bit de era. As comunicações da FEBRABAN sobre a virada (`FB-009/2023` e os avisos de
+2024/2025 que reconfirmei nesta sessão) orientam quem **emite** boleto a partir de 22/02/2025 a usar
+só o fator reiniciado — não é orientação para quem **lê** uma linha já impressa sem saber quando foi
+emitida, que é exatamente o nosso caso. Não encontrei fonte que resolva isso por nós; a regra abaixo é
+decisão de arquitetura minha, não citação de norma, e digo isso às claras porque D14 pôde ser fonte
+citada e esta parte não pode.
+
+**Regra de desambiguação:** calcular as duas datas candidatas; usar a que cair dentro de uma **janela
+de plausibilidade** ancorada em uma referência de tempo fixa; se nenhuma cair na janela, **rejeitar a
+linha** (mesmo padrão de AC1 — falha explícita antes de criar proposta, nunca "não lançou exceção" como
+prova). Nunca escolher por proximidade sem faixa — "mais perto de hoje" sozinho, sem limite, ainda
+aceitaria um erro de anos se a data-limite for solta.
+
+**A prova de que isto não é heurística frágil, é garantia matemática:** as duas datas candidatas para
+o mesmo fator estão sempre exatamente 9000 dias uma da outra (provado acima). Uma janela de
+plausibilidade cuja **largura total seja menor que 9000 dias** **não pode fisicamente conter as duas
+ao mesmo tempo**, não importa onde ela esteja centrada — não é "raro", é impossível por construção.
+Escolhi uma janela de **730 dias no passado e 1825 dias no futuro** (2 e 5 anos, em dias corridos, sem
+depender de calendário de anos bissextos para o cálculo em si) a partir da referência — largura total
+2555 dias, **28% dos 9000 disponíveis**, com folga grande de propósito. **Verifiquei por varredura
+completa dos 9000 valores possíveis de fator (1000 a 9999)**, com a referência fixada em 2026-08-26
+(hoje): **zero fatores produzem as duas datas plausíveis ao mesmo tempo** — a ambiguidade real que você
+pediu para eu checar não existe, para nenhum valor de fator, com esta janela. As duas fixtures da
+tabela acima resolvem sem ambiguidade: fixture A cai só na era original (2024-12-10 está dentro da
+janela; 2049-08-01 não), fixture B cai só na era reiniciada (2025-03-15 dentro; 2000-07-24 não).
+
+**Se algum dia a janela precisar ser mais larga** (para aceitar boletos ainda mais antigos, por
+exemplo), a única regra dura é **largura total < 9000 dias**; qualquer coisa abaixo disso preserva a
+garantia de zero ambiguidade, ela só perde folga. Alargar para ≥9000 reabre exatamente o problema que
+esta seção fecha.
+
+**A referência de tempo não pode ser "agora" calculado separadamente pelo parser e pela RPC — tem que
+ser o mesmo instante gravado, ou os dois podem divergir.** Se cada lado chamar seu próprio relógio
+(`now()`/`Date.now()`), a janela desliza um pouco entre o momento em que a proposta é criada e o
+momento em que a RPC a aplica (dias depois, no limite os 7 dias de `expires_at`) — folga pequena
+perto dos 2555 dias de largura, mas não zero, e "não zero" não é padrão aceitável para uma garantia que
+acabei de provar como exata. **Decisão: a referência é `document_import_proposals.created_at`** —
+coluna que já existe, `NOT NULL DEFAULT now()`, sem grant de `UPDATE` para `authenticated` (só
+`payload` tem grant — ver "O que verifiquei" do primeiro adendo desta rodada), portanto imutável pelo
+cliente depois de criada. O parser usa o instante de criação da proposta (que É `created_at`, por
+definição — não precisa de campo novo); a RPC, ao revalidar por D16, lê o mesmo `created_at` que já
+carrega em `v_proposal` (o `SELECT * INTO v_proposal ... FOR UPDATE` já traz a coluna, custo zero de
+mais uma consulta). Os dois lados calculam a mesma janela, a partir do mesmo instante, sempre — não
+"quase sempre".
+
+### O que isto muda na D16, para a `@data-engineer` ajustar antes de aplicar
+
+A migration de D16 está escrita e **não aplicada** — segue sem aplicar até você levar a autorização ao
+usuário, mas a Dara precisa saber disto antes de fechar a versão final:
+
+1. **A validação de `due_date` não pode mais ser "bate com qualquer uma das duas eras"** — precisa
+   aplicar a regra desta seção (duas candidatas, janela `[created_at − 730d, created_at + 1825d]`,
+   rejeitar se nenhuma bater) e comparar o resultado com `payload.payable.due_date`, do mesmo jeito que
+   D16 já pedia para `amount`.
+2. **Isto reforça minha inclinação pela opção 2 de D16 (coluna nova protegida, escrita uma vez pela
+   Edge Function) em vez da opção 1 (recalcular tudo dentro da RPC em `plpgsql`).** Com a opção 2, só o
+   parser TypeScript precisa implementar a regra de desambiguação — a RPC só compara o valor já
+   decodido e protegido contra `payload.payable.due_date`, sem reimplementar `created_at`-como-âncora,
+   janela e rejeição em `plpgsql` numa segunda linguagem. Com a opção 1, a RPC também precisa da regra
+   inteira, incluindo a leitura de `v_proposal.created_at` como âncora — funciona, mas duplica mais
+   lógica financeira sensível do que eu queria quando escrevi D16 pela primeira vez. Continua sendo
+   decisão de forma da Dara, não travo a escolha dela — só registro que o achado de hoje pesa mais para
+   o lado 2 do que pesava antes.
+3. Se a Dara preferir a opção 1 mesmo assim, o requisito não muda: a RPC usa `v_proposal.created_at`
+   como âncora, nunca `now()`.
+
 ### Delegações deste adendo
 
-- **`@dev`:** implementa D12 (documento sintético + contrato novo da Edge Function), D13, D14, D15 e
-  D17. Nenhuma dessas cinco exige migration nem autorização do usuário — só D12 tem uma perna de
-  produção (publicação da Edge Function), que é do `@devops`.
+- **`@dev`:** implementa D12 (documento sintético + contrato novo da Edge Function), D13, D14 com a
+  regra de desambiguação de D19, D15 e D17. Nenhuma dessas exige migration nem autorização do usuário
+  — só D12 tem uma perna de produção (publicação da Edge Function), que é do `@devops`.
 - **`@devops`:** publica a nova versão de `document-extraction` quando `@dev` terminar D12, com a
   mesma autorização que as publicações anteriores dessa função já seguiram.
-- **`@data-engineer` (Dara):** decide a forma de D16 (recálculo em `plpgsql` x coluna nova protegida) e
-  escreve o índice parcial de D18 (QO-10); duas migrations com rollback pareado, podendo ser uma
-  leva só ou separadas — forma dela. Não aplica nenhuma das duas.
+- **`@data-engineer` (Dara):** ajusta a migration de D16 conforme "O que isto muda na D16" acima antes
+  de considerá-la fechada; decide a forma final (opção 1 ou 2, com inclinação registrada para a 2); e
+  escreve o índice parcial de D18 (QO-10). Três frentes, podendo ser uma leva só ou migrations
+  separadas — forma dela. Não aplica nenhuma.
 - **`@aiox-master` (Orion):** concilia o efeito de D16 sobre QO-6 com a `@ux-design-expert` — já feito,
-  convergiu; leva ao usuário a autorização de migration de D16 e de D18 quando for sequenciá-las
-  (juntas ou separadas); decide se D16/D18 bloqueiam `Ready` da 1.58 ou viram item de acompanhamento,
-  e se D18 (que atravessa categorias) precisa de tratamento próprio nas Stories 1.55-1.57 já `Done`.
+  convergiu; leva ao usuário a autorização de migration de D16 (já com o ajuste de D19) e de D18 quando
+  for sequenciá-las (juntas ou separadas); decide se D16/D18/D19 bloqueiam `Ready` da 1.58 ou viram
+  item de acompanhamento, e se D18 (que atravessa categorias) precisa de tratamento próprio nas
+  Stories 1.55-1.57 já `Done`.

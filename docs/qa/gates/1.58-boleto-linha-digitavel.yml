@@ -1,0 +1,230 @@
+schema: 1
+story: "1.58"
+gate: CONCERNS
+status_reason: >-
+  A implementação do boleto por linha digitável passa na prova local determinística, nas Fixtures A/B
+  de R8, nos estados da UI e na regressão do caminho NF-e. O gate permanece CONCERNS, e não PASS,
+  porque AC5/AC8/AC9/AC10 dependem de efeitos de persistência, RPC, idempotência e tenant no PostgreSQL
+  sem prova E2E autorizada. Além disso, a Edge Function document-extraction não foi publicada: a produção
+  permanece na versão 2, portanto a funcionalidade ainda não está disponível para o usuário. Isso não é
+  FAIL atribuível ao @dev, pois deploy está fora do escopo desta preparação e exige autorização explícita
+  do usuário para execução exclusiva de @devops. Conforme o ciclo de vida, a story foi transicionada de
+  InProgress para Done; Done aqui representa a implementação revisada pelo QA, não release em produção.
+reviewer: "Quinn"
+updated: "2026-08-27"
+transition: "InProgress -> Done"
+
+user_decisions:
+  - "2026-08-26: o usuário recusou criar ambiente Supabase descartável nesta rodada por custo; essa recusa não é permanente."
+  - "2026-08-27: produção deve permanecer somente leitura neste gate; nenhuma migration, DDL/DML, RPC de aplicação, cenário mutável, deploy, push, PR ou CodeRabbit foi autorizado."
+  - "2026-08-27: a Edge Function não foi publicada; qualquer deploy depende de autorização explícita do usuário e deve ser levado pelo @devops."
+
+preconditions:
+  result: PASS
+  verified_at: "2026-08-27"
+  operation: >-
+    Inspeção local e consultas read-only no Supabase. Nenhuma escrita de produção, migration, DDL/DML,
+    RPC de aplicação, deploy, CodeRabbit, push ou PR foi executado pelo @qa.
+  evidence:
+    - >-
+      list_migrations read-only registra 20260827020502_document_import_proposals_partial_unique_index e
+      20260827020610_apply_boleto_payable_proposal_line_defense; Story 1.59/D18 está Done.
+    - >-
+      pg_indexes read-only confirma document_import_proposals_company_id_idempotency_key_key como UNIQUE
+      em (company_id, idempotency_key), com predicado somente para status pending/applied.
+    - >-
+      execute_sql read-only confirma public.apply_boleto_payable_proposal(uuid) com prosecdef=false;
+      o corpo lido exige sessão/empresa, deriva autoridade de idempotency_key, recalcula as duas eras e
+      rejeita divergência de valor/vencimento com RAISE EXCEPTION.
+    - >-
+      O ambiente local não possui psql, Supabase CLI, Docker, pg, @electric-sql/pglite ou testcontainers;
+      o banco de produção contém dados reais e não foi usado para cenários de teste.
+  limitation: >-
+    As pré-condições de D18 e D16 estão satisfeitas, mas a pré-condição operacional de publicação permanece
+    aberta: document-extraction remoto está ACTIVE na versão 2 e não contém o caminho boleto desta story.
+
+baseline:
+  source: "Dev Agent Record da Story 1.58, antes da implementação"
+  measured_at: "2026-08-27"
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas globais: 276 erros e 2 warnings, preexistentes e fora dos arquivos da story."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "24 diagnósticos TypeScript preexistentes, nenhum nos arquivos da story."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "67 arquivos e 595 testes aprovados."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "3005 módulos transformados; warning informativo de chunk acima de 500 kB."
+
+final:
+  measured_by: "@qa, comandos executados separadamente em 2026-08-27"
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas globais: 276 erros e 2 warnings; quadro inalterado, sem diagnóstico nos arquivos do commit."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 1
+    result: "24 diagnósticos preexistentes, nenhum nos arquivos do commit; esta shell retornou exit 1."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "72 arquivos e 626 testes aprovados."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "3008 módulos transformados; warning informativo de chunk acima de 500 kB."
+
+focused:
+  tests:
+    command: "npx vitest run src/services/boletoParser.test.ts src/services/boletoImportService.test.ts src/services/documentExtractionBoleto.test.ts src/services/documentService.test.ts src/hooks/useBoletoImport.test.ts src/pages/documents/components/BoletoImportModal.test.tsx"
+    exit_code: 0
+    result: "6 arquivos e 34 testes aprovados."
+  lint:
+    command: >-
+      npx eslint src/hooks/useBoletoImport.test.ts src/hooks/useBoletoImport.ts
+      src/pages/documents/DocumentsPage.tsx src/pages/documents/components/BoletoImportModal.test.tsx
+      src/pages/documents/components/BoletoImportModal.tsx src/services/boletoImportService.test.ts
+      src/services/boletoImportService.ts src/services/boletoParser.test.ts
+      src/services/documentExtractionBoleto.test.ts src/services/documentService.test.ts
+      src/services/documentService.ts supabase/functions/_shared/document-import/boleto.ts
+      supabase/functions/_shared/document-import/handler.ts supabase/functions/document-extraction/index.ts
+      --report-unused-disable-directives --max-warnings 0
+    exit_code: 0
+    result: "0 erros e 0 warnings nos arquivos de código/teste da story."
+  diff_check:
+    command: "git diff --check 8a2a821^ 8a2a821"
+    exit_code: 0
+    result: "Nenhum erro de whitespace."
+  remote_edge_function:
+    operation: "Supabase list_edge_functions/get_edge_function, somente leitura"
+    result: >-
+      document-extraction ACTIVE, versão 2, verify_jwt=true, hash
+      d68f58a84b125e23cd29872f46629bf65a14b9cddc099626be15c19e4dc954be; o conteúdo remoto é a versão
+      anterior e não contém o caminho boleto/setDocumentSource desta story.
+  remote_database:
+    operation: "Supabase list_migrations/execute_sql, somente leitura"
+    result: >-
+      D18 e D16 estão registradas; índice parcial e função apply_boleto_payable_proposal(uuid) foram
+      confirmados sem DML ou aplicação de cenário.
+  coderabbit: "Não executado: proibido pelo usuário por transmitir código a serviço externo."
+  production_writes: "Nenhuma escrita executada pelo @qa; produção foi somente leitura."
+
+acceptance_criteria:
+  AC1:
+    result: PASS
+    evidence: >-
+      Parser e handler rejeitam vazio/tamanho incorreto antes de job/proposta; normalização canônica não
+      corrige heurísticamente e não chama IA/quota. Execução local real do código do commit.
+    limitation: "A versão executada localmente ainda não está publicada na Edge Function."
+  AC2:
+    result: PASS
+    evidence: >-
+      Testes isolam cada DV de módulo 10 e confirmam ausência de job/proposta no handler para linha inválida.
+      Execução local real do parser e da fronteira do handler.
+    limitation: "Não houve chamada da Edge Function publicada."
+  AC3:
+    result: PASS
+    evidence: >-
+      Barcodes das duas fixtures, restos 0/1/10 do módulo 11 e DV geral incompatível estão assertados;
+      DV geral inválido não avança ao caminho de proposta.
+    limitation: "A ausência de proposta foi verificada na fronteira mockada do handler; não houve E2E de banco."
+  AC4:
+    result: PASS
+    evidence: >-
+      Fixtures independentes têm valor, fator, ambas as datas candidatas e data selecionada assertados
+      exatamente, cobrindo R8: 2024-12-10 e 2025-03-15.
+    limitation: "Prova local do parser; a rota que o usuário acionaria ainda não está publicada."
+  AC5:
+    result: CONCERNS
+    evidence: >-
+      Documento sintético, source, job, proposta, payload/origens e text_origin estão implementados e
+      cobertos por contratos locais do serviço/handler.
+    limitation: >-
+      Não há prova de inserção/estado no PostgreSQL; a Edge Function que executaria o caminho não está
+      publicada.
+  AC6:
+    result: PASS
+    evidence: >-
+      Componente mostra linha, valor/data display-only, selo, descrição acessível, fornecedor, foco/Escape
+      e estados de revisão; testes de serviço, hook e componente passam.
+    limitation: "Não houve inspeção manual de browser, contraste ou renderização de tema."
+  AC7:
+    result: PASS
+    evidence: >-
+      Autosave atualiza somente fornecedor dentro de payload pendente; consultas têm tenant/categoria;
+      pending retoma, applied bloqueia e rejected foi exercitado como nova tentativa, sem bypass.
+    limitation: "A prova disponível é local por serviço/hook/componente; não há cenário PostgreSQL E2E."
+  AC8:
+    result: CONCERNS
+    evidence: >-
+      Cliente chama somente apply_boleto_payable_proposal para proposta pendente; D16 remota foi verificada
+      por leitura (SECURITY INVOKER/prosecdef=false) e recalcula valor/data a partir de idempotency_key,
+      rejeitando divergências.
+    limitation: "Não houve aplicação positiva no banco e a Edge Function não está publicada."
+  AC9:
+    result: CONCERNS
+    evidence: >-
+      Tratamento local cobre falha segura, applied sem retry e colisão 23505 sem bypass.
+    limitation: >-
+      Não há E2E PostgreSQL para concorrência, atomicidade, conta a pagar, rejeição real ou contagens
+      antes/depois; a funcionalidade não está disponível na versão publicada.
+  AC10:
+    result: CONCERNS
+    evidence: >-
+      Handler deriva empresa do documento autorizado e a RPC exige sessão/empresa e compara a proposta
+      com get_user_company_id; cliente não envia company_id nem supplierId como autoridade.
+    limitation: "Não houve sessão/RLS real A/B nem aplicação E2E."
+  AC11:
+    result: PASS
+    evidence: >-
+      npm test e build passam; regressão NF-e e AiSiteIntegrationAction passaram. A alteração do handler
+      compartilhado foi auditada sem alteração incidental observada.
+
+resolved_issues: []
+
+top_issues:
+  - id: "TEST-001"
+    severity: medium
+    status: open
+    finding: >-
+      Continua sem ambiente PostgreSQL descartável autorizado; AC5/AC8/AC9/AC10 não têm prova E2E de
+      persistência, aplicação positiva, concorrência, atomicidade, rollback, contagens e isolamento A/B.
+    suggested_action: "Em rodada futura autorizada, usar ambiente não produtivo e executar a matriz sem escrever na produção."
+  - id: "OPS-001"
+    severity: medium
+    status: deployment_pending
+    finding: >-
+      O código desta story não está na Edge Function em produção: document-extraction permanece na versão
+      2, então a rota não está disponível para o usuário.
+    suggested_action: "Solicitar autorização explícita e encaminhar publicação ao @devops; depois revalidar o runtime."
+  - id: "REL-001"
+    severity: medium
+    status: open
+    finding: "A persistência compartilhada de proposta e itens continua em chamadas separadas com compensação; o risco de compensação permanece aberto."
+    suggested_action: "Avaliar persistência transacional em rodada futura; não redesenhar nem alterar o escopo deste gate."
+  - id: "TEST-003"
+    severity: low
+    status: open
+    finding: "Cobertura anterior de categoria em lote, margem, expiração/reload completo e corrida entre autosaves permanece aberta."
+    suggested_action: "Adicionar testes de interação/concorrência em manutenção futura."
+  - id: "DATA-002"
+    severity: low
+    status: open
+    finding: "NfeProposalItemPatch ainda expõe currentCost, embora saveNfeProposalItem o ignore deliberadamente."
+    suggested_action: "Remover ou separar o campo do tipo em manutenção futura."
+  - id: "DOC-002"
+    severity: low
+    status: open
+    finding: "O cabeçalho da migration D18 ainda referencia 20260826180000; o arquivo reconciliado é 20260827020502."
+    suggested_action: "Encaminhar correção documental à @data-engineer; não editar migration/rollback neste gate."
+
+waiver:
+  active: false

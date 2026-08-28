@@ -1,5 +1,5 @@
 -- Rollback — Story 1.59 (D18): desfaz
--- 20260826180000_document_import_proposals_partial_unique_index.sql.
+-- 20260827020502_document_import_proposals_partial_unique_index.sql.
 --
 -- Restaura a UNIQUE (company_id, idempotency_key) incondicional, com o MESMO nome que a
 -- constraint original tinha (document_import_proposals_company_id_idempotency_key_key),

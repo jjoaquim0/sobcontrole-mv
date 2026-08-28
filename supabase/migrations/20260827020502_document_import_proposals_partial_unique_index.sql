@@ -42,7 +42,8 @@
 -- não pode rodar dentro de transação — exigiria abrir mão do BEGIN/COMMIT único que garante
 -- a ausência de janela desprotegida acima. Com 0 linhas, não há motivo para pagar essa troca.
 --
--- Rollback pareado (supabase/rollbacks/20260826180000_....down.sql) restaura a constraint
+-- Rollback pareado (
+-- supabase/rollbacks/20260827020502_document_import_proposals_partial_unique_index.down.sql) restaura a constraint
 -- UNIQUE incondicional, com o MESMO nome original — reversível sem perda de dado enquanto
 -- nenhuma linha 'rejected'/'expired' tiver sido criada com uma chave já ocupada por outra
 -- linha 'rejected'/'expired' da mesma empresa (ver aviso no arquivo de rollback: isso deixa

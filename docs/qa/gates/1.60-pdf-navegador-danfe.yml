@@ -1,14 +1,14 @@
 schema: 1
 story: "1.60"
-gate: FAIL
+gate: CONCERNS
 status_reason: >-
-  O gate FAIL porque o adapter DANFE aceita uma chave válida repetida em duas ocorrências, embora o
-  requisito e o teste da story exijam erro explícito de ambiguidade; a reprodução isolada falha em 1 de
-  4 testes. Os gates globais passam sem regressão, mas a falha de idempotência/ambiguidade impede concluir
-  a story com segurança.
+  O commit 7644cae corrige a divergência de teste: duas chaves válidas distintas falham como ambíguas e a
+  mesma chave agrupada repetida passa, em linha com a D20; a suíte completa agora executa o adapter e passa.
+  Permanece CONCERNS porque AC3 não tem prova dedicada de viewport/conexão móvel e submissão concorrente, a
+  Edge Function não foi publicada e a taxa de acerto em DANFEs reais ainda é desconhecida.
 reviewer: "Quinn"
-updated: "2026-08-29T15:07:23-03:00"
-transition: "InReview -> InProgress"
+updated: "2026-08-29T15:38:11-03:00"
+transition: "InReview -> Done"
 
 user_decisions:
   - "2026-08-29: CodeRabbit não foi executado, conforme brief e story; nenhum diff foi enviado a serviço externo."
@@ -19,12 +19,12 @@ preconditions:
   result: PASS
   verified_at: "2026-08-29"
   operation: >-
-    Revisão local do commit 407ba3c, testes focados, quatro comandos de gate, auditoria de escopo e scan
+    Revisão local do commit 7644cae, D20, testes focados, quatro comandos de gate, auditoria de escopo e scan
     de segurança nos arquivos de produção alterados; nenhuma operação externa mutável foi executada.
   evidence:
-    - "Story encontrada inicialmente em InReview; brief/Story 1.60 foram lidos integralmente antes da revisão e a transição foi registrada após o veredito."
+    - "Story encontrada em InReview; brief/Story 1.60 e o adendo D20 foram lidos antes da revisão e a transição InReview -> Done foi registrada após o veredito."
     - "pdfjs-dist@6.3.289 confirmado por npm ls; build moderno e worker separado confirmados no dist."
-    - "nfe.ts, boleto.ts, vite.config.ts e .claude/launch.json não foram alterados no commit 407ba3c."
+    - "danfe.ts, nfe.ts, boleto.ts e vite.config.ts não foram alterados entre 407ba3c e 7644cae; o teste do adapter foi movido para src/services."
     - "Nenhuma migration, deploy, push, PR ou CodeRabbit foi executado."
   limitation: >-
     A Edge Function não está publicada nesta versão e não houve E2E contra banco/produção; essa limitação
@@ -63,7 +63,7 @@ final:
   test:
     command: "npm test"
     exit_code: 0
-    result: "74 arquivos e 642 testes aprovados; o teste supabase/functions/.../danfe.test.ts não é incluído pela configuração do Vitest."
+    result: "75 arquivos e 647 testes aprovados; src/services/documentImportDanfe.test.ts aparece na saída da suíte."
   build:
     command: "npm run build"
     exit_code: 0
@@ -78,12 +78,12 @@ focused:
     exit_code: 0
     result: "6 arquivos e 58 testes aprovados."
   danfe_adapter:
-    command: "npx vitest run --config .qa-vitest.config.ts --reporter=verbose (configuração temporária, removida após a execução)"
-    exit_code: 1
-    result: "4 testes: 3 aprovados e 1 falho; repetição da mesma chave retorna pdf_required_field_missing em vez de pdf_access_key_ambiguous."
+    command: "npx vitest run src/services/documentImportDanfe.test.ts --reporter=verbose"
+    exit_code: 0
+    result: "1 arquivo e 5 testes aprovados, incluindo duas chaves válidas distintas como ambiguidade e a mesma chave agrupada repetida como fluxo válido."
     evidence:
-      - "supabase/functions/_shared/document-import/danfe.ts:157-165 usa Set<string>, que elimina ocorrências idênticas."
-      - "supabase/functions/_shared/document-import/danfe.test.ts:70 espera pdf_access_key_ambiguous para duas ocorrências da chave."
+      - "supabase/functions/_shared/document-import/danfe.ts:157-165 usa Set<string>; ocorrências idênticas colapsam e valores distintos produzem candidates.size > 1."
+      - "src/services/documentImportDanfe.test.ts:72 usa SECOND_ACCESS_KEY distinta e válida; a linha 75 repete groupedAccessKey com os campos completos do DANFE."
   lint:
     command: >-
       npx eslint src/hooks/useDocumentImport.ts src/hooks/useDocumentImport.test.tsx
@@ -109,9 +109,9 @@ focused:
   scope_audit:
     result: PASS
     evidence:
-      - "git show --stat 407ba3c registra 17 arquivos no commit sob avaliação."
+      - "git show/diff confirma que 7644cae altera apenas story, gate, adendo D20 e o teste movido; não altera o parser de produção."
       - "A comparação 46edbe3..407ba3c lista 18 arquivos porque inclui o README da pesquisa do commit pai e64dcfc."
-      - "Nenhuma migration e nenhum arquivo proibido foi alterado; git diff --check não encontrou erro."
+      - "Nenhuma migration e nenhum arquivo proibido foi alterado; o diff funcional é restrito, mas git diff --check 407ba3c..7644cae aponta uma linha em branco extra no EOF do teste movido."
       - "O caminho PDF envia somente document_version_id e extracted_text; o handler deriva empresa/categoria e rejeita campos extras."
       - "O caminho PDF cria items = [] e a UI oculta tabela de itens, produtos e estoque."
 
@@ -137,13 +137,13 @@ acceptance_criteria:
     evidence: "Extrator percorre todas as páginas, faz trim de item.str, conta caracteres não-espaço, retorna mensagem literal de escaneado e oferece Salvar só o arquivo; testes de UI/serviço passam."
     limitation: "Sem fixture PDF binária real e sem validação manual em browser autenticado."
   AC6:
-    result: FAIL
-    evidence: "O caso obrigatório de múltiplas candidatas falha: duas ocorrências da mesma chave válida são deduplicadas pelo Set e não viram pdf_access_key_ambiguous."
-    limitation: "A mutação do handler já foi comprovada no brief e não foi repetida."
+    result: PASS
+    evidence: "O teste em src/services/documentImportDanfe.test.ts:72 usa duas chaves válidas distintas e confirma pdf_access_key_ambiguous; a linha 75 confirma que a repetição da mesma chave agrupada segue o fluxo."
+    limitation: "A validação é unitária; não há amostra DANFE real nem E2E da Edge Function publicada."
   AC7:
     result: PASS
     evidence: "O teste focado do handler confirma chave validada, proposta pending, text_origin=client, field origins/fontes e payload de cabeçalho; rotas XML/boleto ficaram intactas."
-    limitation: "O teste dedicado do adapter não entra no npm test padrão."
+    limitation: "O teste dedicado do adapter agora entra no npm test padrão; permanece sem E2E autenticado."
   AC8:
     result: PASS
     evidence: "Adapter e handler produzem items = []; createProposal não insere itens quando a lista está vazia; revisão, resumo e sucesso PDF não prometem produtos/estoque."
@@ -157,28 +157,24 @@ acceptance_criteria:
     evidence: "Hook e componente cobrem revisão, resumo, confirming, success, falhas, retry, validação financeira e preservação do arquivo por ação de fechamento."
     limitation: "Aplicação/RPC e atomicidade permanecem sem E2E de banco."
   AC11:
-    result: FAIL
-    evidence: "Falha de leitura por chave ambígua não satisfaz o requisito de erro explícito antes de criar proposta; o teste correspondente falha quando executado isoladamente."
+    result: PASS
+    evidence: "O teste focado passa o caso de duas chaves diferentes e válidas; o adapter lança pdf_access_key_ambiguous antes da construção do payload/proposta."
+    limitation: "O comportamento foi provado no adapter e no handler mockado, não em uma execução publicada com banco."
   AC12:
     result: PASS
-    evidence: "Lint/typecheck/test/build não têm regressão numérica atribuível ao commit; diff e arquivos proibidos foram auditados."
+    evidence: "Lint/typecheck/test/build mantêm a baseline nos diagnósticos globais; a suíte passa 75/647 e o diff não altera arquivos proibidos."
+    limitation: "git diff --check 407ba3c..7644cae acusa uma linha em branco extra no EOF do teste movido; lint direcionado passa."
   AC13:
     result: PASS
     evidence: "Nenhum deploy, migration, escrita em produção, push, PR ou CodeRabbit ocorreu; a dependência operacional foi mantida explícita."
 
-resolved_issues: []
+resolved_issues:
+  - id: "REQ-001"
+    resolution: "D20 redefine ambiguidade como duas chaves válidas distintas; repetição da mesma chave é legítima e o código Set já implementava a regra."
+  - id: "TEST-001"
+    resolution: "O teste foi movido para src/services/documentImportDanfe.test.ts, caminho incluído pelo Vitest; a suíte passou a 75 arquivos/647 testes."
 
 top_issues:
-  - id: "REQ-001"
-    severity: high
-    status: open
-    finding: "O adapter trata duas ocorrências da mesma chave de acesso válida como uma única candidata, aceitando o fluxo em vez de rejeitar ambiguidade; o teste obrigatório falha."
-    suggested_action: "Preservar a contagem/posição das ocorrências válidas e rejeitar qualquer PDF com mais de uma ocorrência, inclusive quando os valores forem idênticos; adicionar o teste ao conjunto executado pelo npm test."
-  - id: "TEST-001"
-    severity: medium
-    status: open
-    finding: "danfe.test.ts está fora do include do Vitest (vite.config.ts inclui apenas src/**/*.{test,spec}.{ts,tsx}), ocultando a falha do adapter na suíte de 642 testes."
-    suggested_action: "Incluir os testes da Edge Function na configuração de teste ou criar um comando de gate que sempre os execute."
   - id: "TEST-002"
     severity: medium
     status: open
@@ -194,6 +190,11 @@ top_issues:
     status: documented_condition
     finding: "document-extraction não foi publicada com o código desta story."
     suggested_action: "Solicitar autorização operacional e encaminhar o deploy exclusivamente ao @devops; revalidar o runtime depois."
+  - id: "MNT-001"
+    severity: low
+    status: open
+    finding: "git diff --check acusa uma linha em branco extra no fim de src/services/documentImportDanfe.test.ts."
+    suggested_action: "Remover a linha em branco extra em uma rodada de higiene do teste, sem alterar o comportamento coberto."
 
 waiver:
   active: false

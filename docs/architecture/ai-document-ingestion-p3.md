@@ -1241,3 +1241,116 @@ usuário, mas a Dara precisa saber disto antes de fechar a versão final:
   for sequenciá-las (juntas ou separadas); decide se D16/D18/D19 bloqueiam `Ready` da 1.58 ou viram
   item de acompanhamento, e se D18 (que atravessa categorias) precisa de tratamento próprio nas
   Stories 1.55-1.57 já `Done`.
+
+## Adendo (2026-08-29) — D20: duas ocorrências da mesma chave de acesso numa DANFE não são ambiguidade
+
+Pedido do `@aiox-master` (Orion) sobre o gate FAIL da Story 1.60
+(`docs/qa/gates/1.60-pdf-navegador-danfe.yml`, achado citado em
+`docs/stories/1.60.pdf-navegador-danfe.story.md:618`): o código e o teste do adapter DANFE se
+contradizem sobre o que conta como `pdf_access_key_ambiguous`, e nenhum dos dois foi tocado por mim —
+esta é decisão de domínio (leiaute fiscal), não de processo. Nada foi implementado; nenhuma escrita em
+`danfe.ts`, `danfe.test.ts`, na story ou no gate.
+
+### O que verifiquei, linha a linha
+
+- **`supabase/functions/_shared/document-import/danfe.ts:155-171`** (`findAccessKey`): varre
+  `normalizedDigits(text)` — todos os dígitos do texto inteiro, concatenados, sem respeitar quebra de
+  linha ou página — com uma janela deslizante de 44 dígitos, valida cada janela por módulo 11 e
+  acumula em `candidates: Set<string>`. `candidates.size > 1` lança `pdf_access_key_ambiguous`
+  (linha 163); `candidates.size === 0` lança ausência/DV inválido (linha 164). Como é `Set`, duas
+  janelas que produzem o **mesmo valor de 44 dígitos** colapsam para um único elemento — o código,
+  como está, **já implementa** "duas ocorrências da mesma chave não são ambíguas".
+- **`supabase/functions/_shared/document-import/danfe.test.ts:70`**: alimenta
+  `` `${ACCESS_KEY}\nCHAVE: ${ACCESS_KEY}` `` — a mesma chave válida, duas vezes — e espera
+  `pdf_access_key_ambiguous`. Este teste está fixando o comportamento oposto ao que o código produz.
+- **O gate FAIL de Quinn bate exatamente com essa divergência, e explica o sintoma observado.**
+  `normalizedDigits` concatena o texto inteiro antes de janelar; para
+  `` `${ACCESS_KEY}\nCHAVE: ${ACCESS_KEY}` ``, isso produz uma sequência de 88 dígitos (a chave repetida
+  de ponta a ponta, sem dígitos entre as duas cópias — "CHAVE:" não contém dígito). A janela de 44 só
+  bate módulo 11 nos offsets 0 e 44 (as duas cópias inteiras); qualquer offset entre eles é uma rotação
+  dos 44 dígitos e não passa no dígito verificador na prática. As duas janelas válidas produzem o
+  **mesmo** valor → `Set.size` fica em 1, não lança ambíguo, e o parser segue para os campos
+  seguintes — que faltam nesse texto de teste mínimo (sem `RAZÃO SOCIAL`, sem `CNPJ`), daí o
+  `pdf_required_field_missing` que Quinn observou em vez do `pdf_access_key_ambiguous` que o teste
+  exige. **O código não tem o defeito que o gate registrou; é o teste que fixa a leitura errada do
+  domínio**, e o gate herdou o teste como verdade.
+
+### Decisão: opção A — chave repetida não é ambiguidade; ambiguidade é chave DIFERENTE
+
+**O que NÃO é ambiguidade:** duas (ou mais) ocorrências, no texto extraído, do **mesmo** valor de 44
+dígitos que passa módulo 11. O fluxo segue normalmente com essa chave.
+
+**O que É ambiguidade:** duas ou mais sequências de 44 dígitos **distintas entre si**, ambas passando
+módulo 11, no mesmo texto extraído. Só isso deve lançar `pdf_access_key_ambiguous`.
+
+### Por que — leiaute do DANFE, não preferência de implementação
+
+1. **O modelo de DANFE prevê e numera páginas, e a prática do formato é repetir o cabeçalho em cada
+   uma.** O leiaute do DANFE (Ato COTEPE ICMS 07/2018, Anexo do Manual de Orientação do Contribuinte da
+   NF-e — mesmo MOC já citado em D6/§3 da pesquisa de 13/08) reserva um campo `FOLHA n/N` justamente
+   porque uma nota com muitos itens ocupa várias páginas impressas. A convenção do formato — não uma
+   escolha de quem implementa — é repetir o quadro de cabeçalho (identificação do emitente, código de
+   barras e o campo textual "CHAVE DE ACESSO") em cada página, não só na primeira: cada folha física
+   precisa se identificar sozinha, porque folhas de um DANFE de várias páginas podem se separar
+   fisicamente no manuseio (conferência de mercadoria, arquivamento) antes de alguém religá-las. Isto é
+   prática documentada do formato fiscal brasileiro, não uma medição minha sobre uma amostra real —
+   registro o grau de confiança abaixo.
+2. **A suspeita registrada no pedido está certa, e a hipótese que a enfraquecia não se sustenta.** É
+   verdade que o código de barras é imagem e não produz texto — mas o elemento que se repete e que
+   importa aqui não é o código de barras, é o **campo textual "CHAVE DE ACESSO"** impresso como dígitos
+   ao lado/abaixo dele, dentro do mesmo quadro de cabeçalho que se repete por página. Esse campo é
+   texto desde a origem, é exatamente o que `findAccessKey` varre, e é exatamente o que se repete —
+   uma vez por página, no mínimo. A objeção "o código de barras é imagem" não neutraliza o argumento de
+   página única; ela só esclarece qual ocorrência textual produz a repetição (o campo, não o código de
+   barras).
+3. **Tratar repetição como ambiguidade rejeitaria justamente o caso comum, não a exceção.** A NF-e
+   admite até 990 itens por nota (pesquisa de 13/08, §3.1) e o próprio ADR trata NF-e multi-item como
+   motivo estrutural para o contrato aceitar N itens (QA-1, linha 112 acima). Uma nota de muitos itens
+   produzindo um DANFE de várias páginas não é caso de borda — é o desfecho normal para fornecedores
+   com notas maiores. A opção B (repetição = ambíguo) rejeitaria essas notas de forma sistemática,
+   não ocasional.
+4. **O que a checagem de ambiguidade deveria proteger é outra coisa: dois documentos, não duas
+   impressões do mesmo campo.** O risco real que `pdf_access_key_ambiguous` existe para pegar é o PDF
+   conter **duas chaves válidas e diferentes** — por exemplo, upload que concatenou duas DANFEs
+   distintas, ou um texto que referencia a chave de uma nota relacionada/cancelada em
+   "informações complementares" além da chave da própria nota. Isso é exatamente o tipo de erro que
+   D8 (idempotência) e R3/R5 deste ADR já se preocupam em evitar — gravar `idempotency_key` errado
+   associa a proposta ao documento fiscal errado. É esse cenário, e só esse, que justifica falhar
+   fechado em vez de seguir.
+
+### Grau de confiança — o que é normativo e o que ainda depende de amostra real
+
+- **Alta confiança:** a existência do campo `FOLHA n/N` e a convenção de cabeçalho repetido por página
+  em DANFEs de múltiplas páginas é prática documentada do formato, não uma medição minha sobre PDF
+  real — eu não tenho DANFE real para testar, e o usuário ainda não enviou as amostras pedidas
+  anteriormente. Registro isso às claras, como o pedido exigiu.
+- **Isto não muda com a variante de leiaute.** Mesmo que algum software emissor específico produza um
+  DANFE que, de forma não conforme ao padrão, só imprima o cabeçalho na primeira página, D20 continua
+  válida: uma única ocorrência da chave já é `candidates.size === 1` — não ambíguo, não corrigido por
+  esta decisão de qualquer forma. D20 só resolve o que fazer quando a chave aparece **mais de uma
+  vez**; não depende de quantas vezes ela de fato aparece em um layout específico.
+- **Ortogonal, não afetado por esta decisão:** a pesquisa de 29/08 (`docs/research/2026-08-29-pdfjs-navegador-danfe/README.md`,
+  §6) já registra que não há benchmark público de pdf.js extraindo a chave de acesso de uma DANFE real,
+  e que a mitigação é o próprio dígito verificador — não esta decisão. Se pdf.js fragmentar o texto de
+  forma a nunca produzir uma janela de 44 dígitos que bata módulo 11, o resultado é
+  `pdf_access_key_missing`/`pdf_access_key_invalid`, não `pdf_access_key_ambiguous` — problema
+  diferente, já mapeado, não resolvido por D20.
+
+### O que isto significa para quem corrigir a divergência — não é decisão minha
+
+Não edito `danfe.ts`, `danfe.test.ts`, a story 1.60 nem o gate (fronteira desta tarefa). Para quem for
+reconciliar, fica registrado: **o código já está certo**; o teste em `danfe.test.ts:70` fixa a leitura
+errada e precisa virar um caso de **duas chaves válidas e diferentes** (duas sequências de 44 dígitos
+distintas, cada uma passando módulo 11 — não a mesma chave duas vezes) para de fato exercitar o ramo
+ambíguo; vale manter (ou acrescentar) um caso de chave repetida idêntica que **não** lance erro, para
+travar D20 como regressão. O gate FAIL de Quinn foi correto em apontar a divergência entre código e
+teste — só a conclusão de qual lado corrigir é que se resolve aqui.
+
+### Delegações deste adendo
+
+- **`@aiox-master` (Orion):** decide o roteamento da correção (provável: `@sm`/`@dev` ajustam o teste
+  sob a story 1.60 já existente, ou nova story de correção, conforme o processo do projeto) e leva D20
+  ao usuário se ele quiser confirmar antes de destravar o gate. Eu não decido isso — é orquestração,
+  fora da minha autoridade de arquitetura.
+- Nenhuma delegação técnica nova para `@data-engineer` ou `@ux-design-expert`: D20 não toca schema,
+  RPC nem tela de revisão — é leitura de um parser já escrito, sem migration envolvida.

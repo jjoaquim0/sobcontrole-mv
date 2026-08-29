@@ -10,6 +10,12 @@ import {
   type BoletoParserErrorCode,
   type BoletoProposalInput,
 } from './boleto.ts';
+import {
+  DanfeParserError,
+  extractDanfeHeader,
+  type DanfeParserErrorCode,
+  type DanfeProposalInput,
+} from './danfe.ts';
 
 export interface DocumentExtractionIdentity {
   userId: string;
@@ -36,6 +42,28 @@ export interface DocumentExtractionJobInput {
   idempotency_key: string | null;
 }
 
+type DocumentExtractionProposalInputNfe = {
+  job_id: string;
+  company_id: string;
+  document_category: 'nota_fiscal';
+  status: 'pending';
+  idempotency_key: string;
+  payload: NfeHeaderProposalInput['payload'];
+  field_origins: Record<string, unknown>;
+  items: NfeHeaderProposalInput['items'];
+  text_origin: null;
+  truncated: false;
+};
+
+type DocumentExtractionProposalInputPdf = Omit<
+  DanfeProposalInput,
+  'items'
+> & {
+  job_id: string;
+  company_id: string;
+  items: [];
+};
+
 export type DocumentExtractionProposalInput = DocumentExtractionProposalInputNfe | (Omit<
   DocumentExtractionProposalInputNfe,
   'document_category' | 'payload' | 'field_origins' | 'items'
@@ -44,20 +72,7 @@ export type DocumentExtractionProposalInput = DocumentExtractionProposalInputNfe
   payload: BoletoProposalInput['payload'];
   field_origins: BoletoProposalInput['field_origins'];
   items: [];
-});
-
-type DocumentExtractionProposalInputNfe = {
-  job_id: string;
-  company_id: string;
-  document_category: 'nota_fiscal';
-  status: 'pending';
-  idempotency_key: string;
-  payload: NfeHeaderProposalInput['payload'];
-  field_origins: NfeHeaderProposalInput['field_origins'];
-  items: NfeHeaderProposalInput['items'];
-  text_origin: null;
-  truncated: false;
-};
+}) | DocumentExtractionProposalInputPdf;
 
 export interface DocumentExtractionJobReference {
   id: string;
@@ -103,7 +118,8 @@ type HandlerErrorCode =
   | 'duplicate_boleto'
   | 'internal_error'
   | NfeParserErrorCode
-  | BoletoParserErrorCode;
+  | BoletoParserErrorCode
+  | DanfeParserErrorCode;
 
 const PUBLIC_MESSAGES: Record<HandlerErrorCode, string> = {
   invalid_request: 'Corpo de requisicao invalido.',
@@ -141,6 +157,13 @@ const PUBLIC_MESSAGES: Record<HandlerErrorCode, string> = {
   boleto_currency_invalid: 'A linha digitavel nao corresponde a um boleto bancario em reais.',
   boleto_general_dv_invalid: 'O codigo de barras do boleto e invalido.',
   boleto_due_date_ambiguous: 'Nao foi possivel confirmar o vencimento da linha digitavel.',
+  pdf_text_empty: 'Nao conseguimos ler o texto deste arquivo.',
+  pdf_access_key_missing: 'Nao foi possivel localizar uma chave de acesso valida no PDF.',
+  pdf_access_key_invalid: 'Nao foi possivel confirmar a chave de acesso da NF-e no PDF.',
+  pdf_access_key_ambiguous: 'O PDF contem mais de uma chave de acesso possivel.',
+  pdf_required_field_missing: 'O PDF nao possui todos os campos obrigatorios para a importacao.',
+  pdf_money_invalid: 'O PDF possui valor monetario invalido.',
+  pdf_installment_invalid: 'O PDF possui parcela ou vencimento invalido.',
 };
 
 const corsHeaders = (origin: string): Record<string, string> => ({
@@ -184,6 +207,7 @@ const UUID_PATTERN =
 interface DocumentExtractionRequest {
   documentVersionId: string;
   digitableLine?: string;
+  extractedText?: string;
 }
 
 const readExtractionRequest = async (
@@ -200,6 +224,13 @@ const readExtractionRequest = async (
   const documentVersionId = body.document_version_id;
   if (typeof documentVersionId !== 'string' || !UUID_PATTERN.test(documentVersionId)) return null;
 
+  const hasExtractedText = Object.prototype.hasOwnProperty.call(body, 'extracted_text');
+  if (hasExtractedText) {
+    return Object.keys(body).length === 2 && typeof body.extracted_text === 'string'
+      ? { documentVersionId, extractedText: body.extracted_text }
+      : null;
+  }
+
   const hasDigitableLine = Object.prototype.hasOwnProperty.call(body, 'digitable_line');
   if (!hasDigitableLine) {
     return Object.keys(body).length === 1 ? { documentVersionId } : null;
@@ -210,9 +241,10 @@ const readExtractionRequest = async (
     : null;
 };
 
-const errorCodeFromFailure = (error: unknown, category: 'nota_fiscal' | 'boleto'): HandlerErrorCode => {
+const errorCodeFromFailure = (error: unknown, category: 'nota_fiscal' | 'boleto' | 'pdf'): HandlerErrorCode => {
   if (error instanceof NfeParserError) return error.code;
   if (error instanceof BoletoParserError) return error.code;
+  if (error instanceof DanfeParserError) return error.code;
   if (
     error instanceof DocumentExtractionPersistenceError &&
     error.databaseCode === '23505'
@@ -229,7 +261,8 @@ const xmlText = async (source: string | Uint8Array): Promise<string> => {
 
 type DocumentProcessInput =
   | { category: 'nota_fiscal' }
-  | { category: 'boleto'; proposal: BoletoProposalInput };
+  | { category: 'boleto'; proposal: BoletoProposalInput }
+  | { category: 'pdf'; proposal: DanfeProposalInput };
 
 const processDocument = async (
   deps: DocumentExtractionDependencies,
@@ -244,6 +277,19 @@ const processDocument = async (
     failureCode = 'internal_error';
 
     if (input.category === 'boleto') {
+      await deps.createProposal({
+        job_id: jobId,
+        company_id: document.companyId,
+        document_category: input.proposal.document_category,
+        status: input.proposal.status,
+        idempotency_key: input.proposal.idempotency_key,
+        payload: input.proposal.payload,
+        field_origins: input.proposal.field_origins,
+        text_origin: input.proposal.text_origin,
+        truncated: input.proposal.truncated,
+        items: [],
+      });
+    } else if (input.category === 'pdf') {
       await deps.createProposal({
         job_id: jobId,
         company_id: document.companyId,
@@ -332,6 +378,42 @@ export const createDocumentExtractionHandler = (
     if (!document) return errorResponse('document_not_found', origin);
     if (document.category !== 'nota_fiscal' && document.category !== 'boleto') {
       return errorResponse('document_category_invalid', origin);
+    }
+    if (extractionRequest.extractedText !== undefined) {
+      if (document.category !== 'nota_fiscal') return errorResponse('document_category_invalid', origin);
+      if (document.mimeType !== 'application/pdf') return errorResponse('document_mime_invalid', origin);
+
+      let proposal: DanfeProposalInput;
+      try {
+        proposal = extractDanfeHeader(extractionRequest.extractedText);
+      } catch (error) {
+        const code = errorCodeFromFailure(error, 'pdf');
+        deps.logger({ event: 'document_extraction_pdf_validation_failed', code });
+        return errorResponse(code, origin);
+      }
+
+      const id = requestId();
+      let job: DocumentExtractionJobReference;
+      try {
+        job = await deps.createJob({
+          company_id: document.companyId,
+          document_version_id: extractionRequest.documentVersionId,
+          document_category: 'nota_fiscal',
+          requested_by: identity.userId,
+          idempotency_key: proposal.idempotency_key,
+        });
+      } catch (error) {
+        const code = errorCodeFromFailure(error, 'pdf');
+        deps.logger({ event: 'document_extraction_pdf_job_create_failed', code });
+        return errorResponse(code, origin);
+      }
+
+      deps.waitUntil(processDocument(deps, document, job.id, { category: 'pdf', proposal }).then(() => undefined));
+      deps.logger({ event: 'document_extraction_queued', job_id: job.id, request_id: id, document_category: 'nota_fiscal', text_origin: 'client' });
+      return new Response(JSON.stringify({ job_id: job.id, status: 'queued' }), {
+        status: 202,
+        headers: corsHeaders(origin),
+      });
     }
     if (document.category === 'nota_fiscal' && extractionRequest.digitableLine !== undefined) {
       return errorResponse('invalid_request', origin);

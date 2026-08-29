@@ -1,7 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Document } from '../../../types';
 import type { useDocumentImport } from '../../../hooks/useDocumentImport';
+import { DocumentImportError } from '../../../services/documentImportService';
 import type { NfeImportProposal } from '../../../services/documentImportService';
 
 const flow = vi.hoisted(() => ({ current: null as ReturnType<typeof useDocumentImport> | null }));
@@ -22,6 +23,8 @@ const document = {
   mimeType: 'application/xml',
   currentVersionId: 'version-1',
 } as Document;
+
+const pdfDocument = { ...document, name: 'danfe.pdf', originalName: 'danfe.pdf', mimeType: 'application/pdf' } as Document;
 
 const pendingProposal: NfeImportProposal = {
   id: 'proposal-1',
@@ -131,5 +134,56 @@ describe('DocumentImportReviewModal', () => {
     expect(screen.queryByText('Esta nota tem 60 itens — acima dos 60 que revisamos automaticamente aqui. Fornecedor e contas a pagar foram lançados; os produtos não foram adicionados ao estoque — lance-os manualmente.')).not.toBeInTheDocument();
     expect(screen.getByText('Não foi possível identificar itens nesta nota. Revise o restante dos dados — produtos podem ser lançados manualmente depois.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ver resumo e confirmar' })).toBeEnabled();
+  });
+
+  it('mostra aviso de origem, rastreabilidade e escopo header-only no PDF', () => {
+    flow.current = {
+      ...createFlow(),
+      proposal: {
+        ...pendingProposal,
+        textOrigin: 'client',
+        fieldSources: {
+          'supplier.name': 'RAZÃO SOCIAL: Fornecedor DANFE',
+          'purchase.final_value': 'VALOR TOTAL DA NOTA: 100,00',
+        },
+      },
+    };
+    render(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={pdfDocument} />);
+
+    expect(screen.getByText('Este texto foi extraído no seu navegador. O servidor não consegue reconferi-lo contra o PDF original; revise os campos antes de confirmar.')).toBeInTheDocument();
+    expect(screen.getByText('Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.')).toBeInTheDocument();
+    expect(screen.getByText('Ver trecho original: supplier.name')).toBeInTheDocument();
+    expect(screen.getByText('RAZÃO SOCIAL: Fornecedor DANFE')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('mantém “Salvar só o arquivo” no erro de PDF escaneado e não exibe revisão parcial', () => {
+    const onClose = vi.fn();
+    flow.current = {
+      ...createFlow(),
+      proposal: null,
+      state: 'failed' as const,
+      error: new DocumentImportError('pdf_scanned'),
+    };
+    render(<DocumentImportReviewModal isOpen onClose={onClose} document={pdfDocument} />);
+
+    expect(screen.getByText('Não conseguimos ler o texto deste arquivo. Ele parece ser uma imagem escaneada, e no momento não lemos PDFs escaneados.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar só o arquivo' }));
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Ver resumo e confirmar' })).not.toBeInTheDocument();
+  });
+
+  it('não promete itens no resumo ou sucesso do PDF', () => {
+    flow.current = { ...createFlow(), proposal: { ...pendingProposal, textOrigin: 'client' }, state: 'summary' as const };
+    const { rerender } = render(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={pdfDocument} />);
+
+    expect(screen.getByRole('heading', { name: 'Confirmar importação do PDF' })).toBeInTheDocument();
+    expect(screen.getByText('Não importados neste piloto')).toBeInTheDocument();
+    expect(screen.queryByText('Fornecedor, compra, itens, produtos e estoque foram aplicados pela confirmação.')).not.toBeInTheDocument();
+
+    flow.current = { ...createFlow(), proposal: { ...pendingProposal, textOrigin: 'client' }, state: 'success' as const };
+    rerender(<DocumentImportReviewModal isOpen onClose={vi.fn()} document={pdfDocument} />);
+    expect(screen.getByText(/Fornecedor, compra e contas a pagar foram aplicados\./)).toBeInTheDocument();
+    expect(screen.getByText(/Itens, produtos e estoque não serão importados\./)).toBeInTheDocument();
   });
 });

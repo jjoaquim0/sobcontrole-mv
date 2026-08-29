@@ -42,6 +42,13 @@ const VALID_XML_WITH_ITEMS = VALID_XML.replace(
   '</total><det nItem="1"><prod><cProd>SKU-1</cProd><cEAN>7891234567890</cEAN><xProd>Produto 1</xProd><uCom>UN</uCom><qCom>2</qCom><vUnCom>4.50</vUnCom></prod></det><det nItem="2"><prod><cProd>SKU-2</cProd><cEAN>SEM GTIN</cEAN><xProd>Produto 2</xProd><uCom>KG</uCom><qCom>1.5</qCom><vUnCom>3.20</vUnCom></prod></det></infNFe>',
 );
 
+const VALID_DANFE_TEXT = `CHAVE DE ACESSO: ${ACCESS_KEY.slice(0, 4)} ${ACCESS_KEY.slice(4, 8)} ${ACCESS_KEY.slice(8, 12)} ${ACCESS_KEY.slice(12, 16)} ${ACCESS_KEY.slice(16, 20)} ${ACCESS_KEY.slice(20, 24)} ${ACCESS_KEY.slice(24, 28)} ${ACCESS_KEY.slice(28, 32)} ${ACCESS_KEY.slice(32, 36)} ${ACCESS_KEY.slice(36, 40)} ${ACCESS_KEY.slice(40)}
+RAZÃO SOCIAL: Fornecedor PDF
+CNPJ: ${EMITTER}
+VALOR TOTAL DOS PRODUTOS: 10,00
+VALOR TOTAL DA NOTA: 10,00
+PARCELA 001 - 01/09/2026 - R$ 10,00`;
+
 const createDocument = (
   overrides: Partial<AuthorizedDocumentVersion> = {},
 ): AuthorizedDocumentVersion => ({
@@ -313,5 +320,99 @@ describe('document-extraction handler security and persistence boundary', () => 
     await runBackgroundTask(tasks);
     expect(deps.markJobFailed).toHaveBeenCalledWith(JOB_ID, COMPANY_ID, 'internal_error');
     expect(JSON.stringify((deps.logger as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(secret);
+  });
+
+  it('rejects PDF body fields controlled by the client before authentication or insertion', async () => {
+    const { deps, tasks } = createDeps();
+    const response = await createDocumentExtractionHandler(deps)(
+      createRequest({ document_version_id: VERSION_ID, extracted_text: VALID_DANFE_TEXT, company_id: 'company-b', idempotency_key: ACCESS_KEY }),
+    );
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).error.code).toBe('invalid_request');
+    expect(deps.authenticate).not.toHaveBeenCalled();
+    expect(deps.createJob).not.toHaveBeenCalled();
+    expect(tasks).toHaveLength(0);
+  });
+
+  it('valida a chave no servidor, enfileira PDF e persiste apenas o cabeçalho client-origin', async () => {
+    const readXml = vi.fn(async () => { throw new Error('PDF path must not read XML'); });
+    const { deps, tasks } = createDeps({
+      resolveDocument: vi.fn(async () => createDocument({ mimeType: 'application/pdf', readXml })),
+    });
+
+    const response = await createDocumentExtractionHandler(deps)(
+      createRequest({ document_version_id: VERSION_ID, extracted_text: VALID_DANFE_TEXT }),
+    );
+
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ job_id: JOB_ID, status: 'queued' });
+    expect(deps.createJob).toHaveBeenCalledWith({
+      company_id: COMPANY_ID,
+      document_version_id: VERSION_ID,
+      document_category: 'nota_fiscal',
+      requested_by: USER_ID,
+      idempotency_key: ACCESS_KEY,
+    });
+    await runBackgroundTask(tasks);
+    expect(readXml).not.toHaveBeenCalled();
+    expect(deps.createProposal).toHaveBeenCalledWith(expect.objectContaining({
+      company_id: COMPANY_ID,
+      document_category: 'nota_fiscal',
+      idempotency_key: ACCESS_KEY,
+      text_origin: 'client',
+      truncated: false,
+      items: [],
+      payload: expect.objectContaining({
+        supplier: expect.objectContaining({ name: 'Fornecedor PDF' }),
+        purchase: expect.objectContaining({ payment_method: 'other', final_value: 10 }),
+      }),
+    }));
+    expect(deps.markJobDone).toHaveBeenCalledWith(JOB_ID, COMPANY_ID);
+    expect(JSON.stringify((deps.logger as ReturnType<typeof vi.fn>).mock.calls)).not.toContain(VALID_DANFE_TEXT);
+  });
+
+  it('rejeita texto PDF sem chave verificada sem criar job ou proposta', async () => {
+    const { deps, tasks } = createDeps({
+      resolveDocument: vi.fn(async () => createDocument({ mimeType: 'application/pdf' })),
+    });
+    const response = await createDocumentExtractionHandler(deps)(
+      createRequest({ document_version_id: VERSION_ID, extracted_text: 'RAZÃO SOCIAL: Fornecedor PDF\nCNPJ: 12345678000195\nVALOR TOTAL DA NOTA: 10,00' }),
+    );
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).error.code).toBe('pdf_access_key_missing');
+    expect(deps.createJob).not.toHaveBeenCalled();
+    expect(deps.createProposal).not.toHaveBeenCalled();
+    expect(tasks).toHaveLength(0);
+  });
+
+  it('rejeita PDF autorizado fora da categoria de NF-e', async () => {
+    const { deps, tasks } = createDeps({
+      resolveDocument: vi.fn(async () => createDocument({ category: 'contrato', mimeType: 'application/pdf' })),
+    });
+    const response = await createDocumentExtractionHandler(deps)(
+      createRequest({ document_version_id: VERSION_ID, extracted_text: VALID_DANFE_TEXT }),
+    );
+
+    expect(response.status).toBe(422);
+    expect((await response.json()).error.code).toBe('document_category_invalid');
+    expect(deps.createJob).not.toHaveBeenCalled();
+    expect(tasks).toHaveLength(0);
+  });
+
+  it('mantém duplicidade PDF como conflito idempotente da mesma empresa', async () => {
+    const { deps, tasks } = createDeps({
+      resolveDocument: vi.fn(async () => createDocument({ mimeType: 'application/pdf' })),
+      createJob: vi.fn(async () => { throw new DocumentExtractionPersistenceError('23505'); }),
+    });
+    const response = await createDocumentExtractionHandler(deps)(
+      createRequest({ document_version_id: VERSION_ID, extracted_text: VALID_DANFE_TEXT }),
+    );
+
+    expect(response.status).toBe(409);
+    expect((await response.json()).error.code).toBe('duplicate_nfe');
+    expect(tasks).toHaveLength(0);
+    expect(deps.createProposal).not.toHaveBeenCalled();
   });
 });

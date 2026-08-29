@@ -2,6 +2,7 @@ import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/authStore';
 import { Document } from '../types';
+import { extractPdfText, PdfTextExtractionError } from './pdfTextExtractor';
 
 export type DocumentExtractionJobStatus = 'queued' | 'running' | 'done' | 'failed';
 export type DocumentImportProposalStatus = 'pending' | 'applied' | 'rejected' | 'expired';
@@ -60,6 +61,7 @@ export interface NfeImportProposalItem {
   position: number;
   payload: NfeProposalItemPayload;
   fieldOrigins: Record<string, string>;
+  fieldSources?: Record<string, string>;
   matchedProductId: string | null;
   currentCost: number | null;
   documentCost: number | null;
@@ -180,6 +182,7 @@ export interface NfeImportProposal {
   status: DocumentImportProposalStatus;
   payload: NfeHeaderProposalPayload;
   fieldOrigins: Record<string, string>;
+  fieldSources?: Record<string, string>;
   textOrigin: 'server' | 'client' | null;
   truncated: boolean;
   expiresAt: string;
@@ -206,6 +209,15 @@ export type DocumentImportErrorCode =
   | 'nfe_cnpj_suspeito'
   | 'nfe_xml_invalid'
   | 'nfe_access_key_invalid'
+  | 'pdf_text_empty'
+  | 'pdf_scanned'
+  | 'pdf_text_extraction_failed'
+  | 'pdf_access_key_missing'
+  | 'pdf_access_key_invalid'
+  | 'pdf_access_key_ambiguous'
+  | 'pdf_required_field_missing'
+  | 'pdf_money_invalid'
+  | 'pdf_installment_invalid'
   | 'duplicate_nfe'
   | 'document_not_found'
   | 'unauthorized'
@@ -216,6 +228,15 @@ export type DocumentImportErrorCode =
 export const ATOMIC_APPLY_ERROR_MESSAGE = 'Nada foi gravado. O documento original continua salvo. Tente novamente.';
 
 const PUBLIC_ERROR_MESSAGES: Record<DocumentImportErrorCode, string> = {
+  pdf_text_empty: 'Não foi possível ler texto suficiente deste PDF.',
+  pdf_scanned: 'Não conseguimos ler o texto deste arquivo. Ele parece ser uma imagem escaneada, e no momento não lemos PDFs escaneados.',
+  pdf_text_extraction_failed: 'Não foi possível ler o texto deste PDF. Tente novamente ou salve só o arquivo.',
+  pdf_access_key_missing: 'Não foi possível localizar uma chave de acesso válida no PDF.',
+  pdf_access_key_invalid: 'Não foi possível confirmar a chave de acesso da NF-e no PDF.',
+  pdf_access_key_ambiguous: 'O PDF contém mais de uma chave de acesso possível.',
+  pdf_required_field_missing: 'O PDF não possui todos os campos obrigatórios para a importação.',
+  pdf_money_invalid: 'O PDF possui valor monetário inválido.',
+  pdf_installment_invalid: 'O PDF possui parcela ou vencimento inválido.',
   nfe_saida_nao_suportada: 'NF-e de saída não é suportada nesta rota.',
   nfe_cnpj_suspeito: 'Os CNPJs da NF-e não correspondem a uma entrada segura.',
   nfe_xml_invalid: 'O XML da NF-e não pôde ser validado com segurança.',
@@ -277,7 +298,12 @@ const mapProposal = (row: Record<string, unknown>): NfeImportProposal => {
     documentCategory: 'nota_fiscal',
     status: row.status as DocumentImportProposalStatus,
     payload: payloadResult.payload,
-    fieldOrigins: isRecord(row.field_origins) ? Object.fromEntries(Object.entries(row.field_origins).map(([key, value]) => [key, String(value)])) : {},
+    fieldOrigins: isRecord(row.field_origins)
+      ? Object.fromEntries(Object.entries(row.field_origins).map(([key, value]) => [key, isRecord(value) && typeof value.origin === 'string' ? value.origin : String(value)]))
+      : {},
+    fieldSources: isRecord(row.field_origins)
+      ? Object.fromEntries(Object.entries(row.field_origins).flatMap(([key, value]) => isRecord(value) && typeof value.source === 'string' ? [[key, value.source]] : []))
+      : {},
     textOrigin: row.text_origin === 'server' || row.text_origin === 'client' ? row.text_origin : null,
     truncated: row.truncated === true,
     expiresAt: String(row.expires_at),
@@ -468,6 +494,7 @@ export const validateNfeProposalPayload = (payload: NfeHeaderProposalPayload): N
 const errorCodeFromValue = (value: unknown): DocumentImportErrorCode | null => {
   if (typeof value !== 'string') return null;
   if (value === 'nfe_saida_nao_suportada' || value === 'nfe_cnpj_suspeito' || value === 'duplicate_nfe' || value === 'document_not_found' || value === 'unauthorized') return value;
+  if (value === 'pdf_text_empty' || value === 'pdf_scanned' || value === 'pdf_text_extraction_failed' || value === 'pdf_access_key_missing' || value === 'pdf_access_key_invalid' || value === 'pdf_access_key_ambiguous' || value === 'pdf_required_field_missing' || value === 'pdf_money_invalid' || value === 'pdf_installment_invalid') return value;
   if (value === 'nfe_access_key_invalid' || value.startsWith('nfe_access_key_')) return 'nfe_access_key_invalid';
   if (value.startsWith('nfe_xml_') || value.startsWith('nfe_structure') || value.startsWith('nfe_version') || value.startsWith('nfe_model') || value.startsWith('nfe_required') || value.startsWith('nfe_money') || value.startsWith('nfe_item') || value.startsWith('nfe_installment') || value.startsWith('company_cnpj')) return 'nfe_xml_invalid';
   if (value === 'internal_error') return 'internal_error';
@@ -514,6 +541,33 @@ export const startNfeDocumentExtraction = async (
   } catch (error) {
     if (error instanceof DocumentImportError) throw error;
     throw await extractFunctionError(error);
+  }
+};
+
+export const startPdfDocumentExtraction = async (
+  documentVersionId: string,
+  storagePath: string,
+): Promise<{ jobId: string; status: 'queued' }> => {
+  requireCompanyId();
+  try {
+    const { data: file, error: downloadError } = await supabase.storage
+      .from('documents')
+      .download(storagePath);
+    if (downloadError || !file) throw new DocumentImportError('pdf_text_extraction_failed');
+
+    const { text } = await extractPdfText(file);
+    const { data, error } = await supabase.functions.invoke('document-extraction', {
+      body: { document_version_id: documentVersionId, extracted_text: text },
+    });
+    if (error) throw await extractFunctionError(error);
+    if (!isRecord(data) || typeof data.job_id !== 'string' || data.status !== 'queued') {
+      throw new DocumentImportError('internal_error');
+    }
+    return { jobId: data.job_id, status: 'queued' };
+  } catch (error) {
+    if (error instanceof DocumentImportError) throw error;
+    if (error instanceof PdfTextExtractionError) throw new DocumentImportError(error.code);
+    throw new DocumentImportError('pdf_text_extraction_failed');
   }
 };
 
@@ -791,7 +845,7 @@ export const applyNfePurchaseProposal = async (proposalId: string): Promise<NfeI
 
 export const isNfeDocumentImportEligible = (document: Document): boolean =>
   document.category === 'nota_fiscal' &&
-  (document.mimeType === 'text/xml' || document.mimeType === 'application/xml') &&
+  (document.mimeType === 'text/xml' || document.mimeType === 'application/xml' || document.mimeType === 'application/pdf') &&
   Boolean(document.currentVersionId);
 
 export const getNfeProposalFormWithNotes = (

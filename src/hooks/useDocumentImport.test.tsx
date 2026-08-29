@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   saveItem: vi.fn(),
   searchProducts: vi.fn(),
   start: vi.fn(),
+  startPdf: vi.fn(),
   isEligible: vi.fn(() => true),
 }));
 
@@ -27,6 +28,7 @@ vi.mock('../services/documentImportService', () => ({
   saveNfeProposalItem: mocks.saveItem,
   searchNfeProducts: mocks.searchProducts,
   startNfeDocumentExtraction: mocks.start,
+  startPdfDocumentExtraction: mocks.startPdf,
   DocumentImportError: class DocumentImportError extends Error {
     code: string;
 
@@ -55,6 +57,8 @@ const document = {
   createdAt: '2026-08-24T00:00:00.000Z',
   updatedAt: '2026-08-24T00:00:00.000Z',
 } as Document;
+
+const pdfDocument = { ...document, mimeType: 'application/pdf', name: 'danfe.pdf', originalName: 'danfe.pdf', storagePath: 'documents/danfe.pdf' } as Document;
 
 const job = (status: 'queued' | 'running' | 'failed' | 'done', error?: string) => ({
   id: 'job-1',
@@ -111,6 +115,27 @@ describe('useDocumentImport', () => {
     await waitFor(() => expect(result.current.state).toBe('queued'));
     expect(mocks.start).toHaveBeenCalledTimes(1);
     expect(mocks.start).toHaveBeenCalledWith('version-1');
+  });
+
+  it('lê PDF no cliente e envia o storage path apenas para o download local', async () => {
+    mocks.findLatest.mockResolvedValue(null);
+    mocks.startPdf.mockResolvedValue({ jobId: 'job-pdf', status: 'queued' });
+
+    const { result } = renderHook(() => useDocumentImport(pdfDocument, true));
+
+    await waitFor(() => expect(result.current.state).toBe('running'));
+    expect(mocks.startPdf).toHaveBeenCalledWith('version-1', 'documents/danfe.pdf');
+    expect(mocks.start).not.toHaveBeenCalled();
+  });
+
+  it('mantém falha de PDF escaneado explícita e não faz retry automático', async () => {
+    mocks.findLatest.mockResolvedValue(job('failed', 'pdf_scanned'));
+
+    const { result } = renderHook(() => useDocumentImport(pdfDocument, true));
+
+    await waitFor(() => expect(result.current.state).toBe('failed'));
+    expect(result.current.error?.code).toBe('pdf_scanned');
+    expect(mocks.startPdf).not.toHaveBeenCalled();
   });
 
   it('não repete automaticamente uma extração falha e permite retry explícito', async () => {

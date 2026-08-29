@@ -15,6 +15,7 @@ import {
   NfeProposalItemPatch,
   NfeImportProposal,
   startNfeDocumentExtraction,
+  startPdfDocumentExtraction,
   SupplierMatchResult,
   saveNfeProposalPayload,
   getNfeProposalItems,
@@ -41,9 +42,22 @@ const toSafeError = (error: unknown, fallbackCode: DocumentImportErrorCode = 'in
   return new DocumentImportError(fallbackCode);
 };
 
+const PDF_IMPORT_ERROR_CODES = new Set<string>([
+  'pdf_text_empty',
+  'pdf_scanned',
+  'pdf_text_extraction_failed',
+  'pdf_access_key_missing',
+  'pdf_access_key_invalid',
+  'pdf_access_key_ambiguous',
+  'pdf_required_field_missing',
+  'pdf_money_invalid',
+  'pdf_installment_invalid',
+]);
+
 export const useDocumentImport = (document?: Document, isOpen = false) => {
   const versionId = document?.currentVersionId;
   const eligible = Boolean(document && isNfeDocumentImportEligible(document));
+  const isPdf = document?.mimeType === 'application/pdf';
   const [state, setState] = useState<DocumentImportViewState>('idle');
   const [job, setJob] = useState<DocumentExtractionJob | null>(null);
   const [proposal, setProposal] = useState<NfeImportProposal | null>(null);
@@ -107,8 +121,13 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
     }
     if (nextJob.status === 'failed') {
       const code = nextJob.error || 'internal_error';
+      const safeCode: DocumentImportErrorCode = code === 'duplicate_nfe'
+        ? 'duplicate_nfe'
+        : PDF_IMPORT_ERROR_CODES.has(code)
+          ? code as DocumentImportErrorCode
+          : 'internal_error';
       setError(new DocumentImportError(
-        code === 'duplicate_nfe' ? 'duplicate_nfe' : 'internal_error',
+        safeCode,
         getDocumentImportErrorMessage(code),
       ));
       setState('failed');
@@ -132,8 +151,12 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
         return;
       }
       setError(null);
-      setState('queued');
-      await startNfeDocumentExtraction(versionId);
+      setState(isPdf ? 'running' : 'queued');
+      if (isPdf && document) {
+        await startPdfDocumentExtraction(versionId, document.storagePath);
+      } else {
+        await startNfeDocumentExtraction(versionId);
+      }
     } catch (reconcileError) {
       const safeError = toSafeError(reconcileError);
       setError(safeError);
@@ -141,7 +164,7 @@ export const useDocumentImport = (document?: Document, isOpen = false) => {
     } finally {
       operationRef.current = false;
     }
-  }, [eligible, hydrateJob, versionId]);
+  }, [document, eligible, hydrateJob, isPdf, versionId]);
 
   useEffect(() => {
     generationRef.current += 1;

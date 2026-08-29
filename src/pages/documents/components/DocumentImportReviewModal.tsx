@@ -21,6 +21,9 @@ export interface DocumentImportReviewModalProps {
   document: Document;
 }
 
+const PDF_CLIENT_WARNING = 'Este texto foi extraído no seu navegador. O servidor não consegue reconferi-lo contra o PDF original; revise os campos antes de confirmar.';
+const PDF_HEADER_ONLY_NOTICE = 'Este piloto importa somente fornecedor, compra e contas a pagar. Itens, produtos e estoque não serão importados.';
+
 const initialForm: NfeProposalFormValues = {
   supplierDocument: '',
   supplierName: '',
@@ -85,6 +88,8 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
   const supplierMatch = importFlow.supplierMatch;
   const hasSupplierConflict = supplierMatch?.status === 'conflict';
   const itemCount = importFlow.itemCount;
+  const isPdf = document.mimeType === 'application/pdf';
+  const isClientPdf = isPdf && importFlow.proposal?.textOrigin === 'client';
   const isOverItemLimit = itemCount > NFE_ITEM_REVIEW_LIMIT;
   const areItemsReady = isOverItemLimit || importFlow.items.every(isNfeProposalItemReady);
   const canConfirm = Boolean(
@@ -152,7 +157,7 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#0B2551] to-[#00d2ff] text-white"><Sparkles className="h-5 w-5" /></span>
             <div>
               <h2 id="document-import-title" ref={headingRef} tabIndex={-1} className="text-lg font-bold text-gray-900 outline-none dark:text-white">Revisar importação — Nota Fiscal</h2>
-              <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{document.originalName || document.name} · XML original preservado</p>
+              <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">{document.originalName || document.name} · {isPdf ? 'PDF original preservado' : 'XML original preservado'}</p>
             </div>
           </div>
           <button type="button" onClick={safeClose} disabled={isConfirming} className="rounded-xl p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white" aria-label="Fechar revisão"><X className="h-5 w-5" /></button>
@@ -162,16 +167,20 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
 
         <div className="min-h-0 overflow-y-auto p-5">
           {(importFlow.state === 'idle' || importFlow.state === 'queued' || importFlow.state === 'running' || importFlow.state === 'failed' || (importFlow.state === 'error' && !importFlow.proposal)) && (
-            <ExtractionState state={importFlow.state} error={importFlow.error?.message} onRetry={() => void importFlow.retry()} />
+            <ExtractionState state={importFlow.state} error={importFlow.error?.message} errorCode={importFlow.error?.code} isPdf={isPdf} onRetry={() => void importFlow.retry()} onSaveOnly={onClose} />
           )}
 
           {importFlow.state === 'review' && (
             <div className="grid gap-5 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
               <DocumentImportContext document={document} />
               <div className="space-y-5">
-                {isOverItemLimit
-                  ? <VolumeNotice count={itemCount} />
-                  : <NfeItemReviewTable items={importFlow.items} onSaveItem={importFlow.saveItem} onSearchProducts={importFlow.searchProducts} loadCategories={importFlow.loadCategories} createCategory={importFlow.createCategory} />}
+                {isPdf
+                  ? <PdfHeaderOnlyNotice />
+                  : isOverItemLimit
+                    ? <VolumeNotice count={itemCount} />
+                    : <NfeItemReviewTable items={importFlow.items} onSaveItem={importFlow.saveItem} onSearchProducts={importFlow.searchProducts} loadCategories={importFlow.loadCategories} createCategory={importFlow.createCategory} />}
+                {isClientPdf && <div role="alert" aria-live="polite" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium leading-5 text-amber-900 dark:border-amber-400/20 dark:bg-amber-950/20 dark:text-amber-100">{PDF_CLIENT_WARNING}</div>}
+                {isClientPdf && <FieldSources sources={importFlow.proposal?.fieldSources} />}
                 {importFlow.error && <ErrorMessage message={importFlow.error.message} />}
                 <form onSubmit={(event) => { event.preventDefault(); handleSummary(); }} noValidate className="space-y-5">
                   <section aria-labelledby="supplier-section-title" className="space-y-3 rounded-2xl border border-gray-200 p-4 dark:border-white/10">
@@ -215,10 +224,12 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
           )}
 
           {(importFlow.state === 'summary' || isConfirming) && summaryPayload && (
-            <SummaryState payload={summaryPayload} supplierLabel={supplierLabel} itemCount={itemCount} items={importFlow.items} isConfirming={isConfirming} onBack={() => importFlow.backToReview()} onConfirm={handleConfirm} />
+            isPdf
+              ? <PdfSummaryState payload={summaryPayload} supplierLabel={supplierLabel} isConfirming={isConfirming} onBack={() => importFlow.backToReview()} onConfirm={handleConfirm} />
+              : <SummaryState payload={summaryPayload} supplierLabel={supplierLabel} itemCount={itemCount} items={importFlow.items} isConfirming={isConfirming} onBack={() => importFlow.backToReview()} onConfirm={handleConfirm} />
           )}
 
-          {importFlow.state === 'success' && <SuccessState itemCount={itemCount} />}
+          {importFlow.state === 'success' && (isPdf ? <PdfSuccessState /> : <SuccessState itemCount={itemCount} />)}
           {importFlow.state === 'error' && importFlow.proposal && <div className="space-y-4">{isOverItemLimit && <VolumeNotice count={itemCount} />}<ErrorMessage message={importFlow.error?.message || ATOMIC_APPLY_ERROR_MESSAGE} /><button type="button" onClick={() => importFlow.backToReview()} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar à revisão</button></div>}
         </div>
       </section>
@@ -226,17 +237,31 @@ export const DocumentImportReviewModal: React.FC<DocumentImportReviewModalProps>
   );
 };
 
-const ExtractionState: React.FC<{ state: ReturnType<typeof useDocumentImport>['state']; error?: string; onRetry: () => void }> = ({ state, error, onRetry }) => {
+const PdfExtractionFeedback: React.FC<{ errorCode?: string; onSaveOnly: () => void }> = ({ errorCode, onSaveOnly }) => errorCode ? <button type="button" onClick={onSaveOnly} className="mx-auto block rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Salvar só o arquivo</button> : null;
+
+const FieldSources: React.FC<{ sources?: Record<string, string> }> = ({ sources }) => {
+  const entries = Object.entries(sources || {});
+  if (entries.length === 0) return null;
+  return <section className="rounded-xl border border-cyan-200 bg-cyan-50/60 p-3 dark:border-cyan-400/20 dark:bg-cyan-950/20" aria-label="Trechos originais da extração"><h3 className="text-xs font-bold uppercase tracking-wide text-cyan-900 dark:text-cyan-100">Rastreabilidade dos campos</h3><div className="mt-2 space-y-1">{entries.map(([field, source]) => <details key={field} className="rounded-lg bg-white/60 px-2 py-1.5 text-xs dark:bg-white/5"><summary className="cursor-pointer font-semibold text-cyan-900 outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 dark:text-cyan-100">Ver trecho original: {field}</summary><p className="mt-1 whitespace-pre-wrap break-words text-cyan-950 dark:text-cyan-50">{source}</p></details>)}</div></section>;
+};
+
+const PdfHeaderOnlyNotice: React.FC = () => <p role="status" className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm font-medium leading-5 text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">{PDF_HEADER_ONLY_NOTICE}</p>;
+
+const ExtractionState: React.FC<{ state: ReturnType<typeof useDocumentImport>['state']; error?: string; errorCode?: string; isPdf?: boolean; onRetry: () => void; onSaveOnly?: () => void }> = ({ state, error, errorCode, isPdf, onRetry, onSaveOnly }) => {
   const running = state === 'queued' || state === 'running';
+  const pdfLoadingMessage = isPdf && running;
+  const pdfFeedback = isPdf && (state === 'failed' || state === 'error') && onSaveOnly;
   return <section className="mx-auto max-w-xl space-y-4 rounded-2xl border border-gray-200 p-6 text-center dark:border-white/10">
+    {pdfLoadingMessage && <p role="status" aria-live="polite" className="text-sm font-medium text-cyan-700 dark:text-cyan-300">Lendo o PDF no seu navegador. O arquivo bruto não será enviado a um serviço novo.</p>}
+    {pdfFeedback && <PdfExtractionFeedback errorCode={errorCode} onSaveOnly={onSaveOnly} />}
     {running ? <Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-500" aria-label="Extraindo" /> : state === 'failed' || state === 'error' ? <AlertCircle className="mx-auto h-8 w-8 text-red-500" /> : <Sparkles className="mx-auto h-8 w-8 text-cyan-500" />}
     <h3 className="text-lg font-bold text-gray-900 dark:text-white">{running ? 'Acompanhando a extração' : state === 'failed' || state === 'error' ? 'Não foi possível concluir a extração' : 'Preparando importação'}</h3>
-    <p className="text-sm text-gray-500 dark:text-gray-400">{error || (running ? 'Aguarde enquanto o XML é validado. Esta tela será atualizada automaticamente.' : 'A proposta será carregada sob a sessão da sua empresa.')}</p>
+    <p className="text-sm text-gray-500 dark:text-gray-400">{error || (running ? isPdf ? 'Aguarde enquanto o texto do PDF é preparado. Esta tela será atualizada automaticamente.' : 'Aguarde enquanto o XML é validado. Esta tela será atualizada automaticamente.' : 'A proposta será carregada sob a sessão da sua empresa.')}</p>
     {state === 'failed' || state === 'error' ? <button type="button" onClick={onRetry} className="rounded-xl bg-[#0B2551] px-4 py-2.5 text-sm font-bold text-white hover:bg-[#12366f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">Tentar novamente</button> : null}
   </section>;
 };
 
-const DocumentImportContext: React.FC<{ document: Document }> = ({ document }) => <aside className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]"><h3 className="font-bold text-gray-900 dark:text-white">Documento original</h3><dl className="space-y-3 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Arquivo</dt><dd className="mt-1 break-words font-medium text-gray-800 dark:text-gray-200">{document.originalName || document.name}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Formato</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">XML · {document.mimeType}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Versão usada</dt><dd className="mt-1 break-all font-mono text-xs text-gray-700 dark:text-gray-300">{document.currentVersionId}</dd></div></dl><p className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">A revisão altera somente a proposta. O arquivo e a versão originais continuam preservados.</p></aside>;
+const DocumentImportContext: React.FC<{ document: Document }> = ({ document }) => <aside className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-white/10 dark:bg-white/[0.03]"><h3 className="font-bold text-gray-900 dark:text-white">Documento original</h3><dl className="space-y-3 text-sm"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Arquivo</dt><dd className="mt-1 break-words font-medium text-gray-800 dark:text-gray-200">{document.originalName || document.name}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Formato</dt><dd className="mt-1 text-gray-700 dark:text-gray-300">{document.mimeType === 'application/pdf' ? 'PDF' : 'XML'} · {document.mimeType}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Versão usada</dt><dd className="mt-1 break-all font-mono text-xs text-gray-700 dark:text-gray-300">{document.currentVersionId}</dd></div></dl><p className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">A revisão altera somente a proposta. O arquivo e a versão originais continuam preservados.</p></aside>;
 
 const VolumeNotice: React.FC<{ count: number }> = ({ count }) => <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-medium leading-5 text-amber-900 dark:border-amber-400/20 dark:bg-amber-950/20 dark:text-amber-100">{VOLUME_NOTICE(count)}</p>;
 
@@ -244,4 +269,8 @@ const MoneyField: React.FC<{ id: string; label: string; value: string; error?: s
 
 const SummaryState: React.FC<{ payload: NonNullable<ReturnType<typeof validateNfeProposalForm>['payload']>; supplierLabel: string; itemCount: number; items: ReturnType<typeof useDocumentImport>['items']; isConfirming: boolean; onBack: () => void; onConfirm: () => void }> = ({ payload, supplierLabel, itemCount, items, isConfirming, onBack, onConfirm }) => <div className="mx-auto max-w-2xl space-y-5">{itemCount > NFE_ITEM_REVIEW_LIMIT ? <VolumeNotice count={itemCount} /> : <p className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm font-medium text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">{items.length > 0 ? `${items.length} item(ns) revisado(s); produtos e estoque serão atualizados na confirmação.` : 'Não foi possível identificar itens nesta nota. Eles poderão ser lançados manualmente depois.'}</p>}<section className="rounded-2xl border border-gray-200 p-5 dark:border-white/10"><h3 className="text-xl font-bold text-gray-900 dark:text-white">Confirmar importação</h3><dl className="mt-5 grid gap-4 sm:grid-cols-2"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fornecedor</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.supplier.name}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">{supplierLabel}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Compra</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(payload.purchase.final_value)}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Pagamento: outro</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contas a pagar</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.purchase.installments.length} parcela(s)</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Total: {formatCurrency(payload.purchase.installments.reduce((total, installment) => total + installment.amount, 0))}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens, produtos e estoque</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{itemCount > NFE_ITEM_REVIEW_LIMIT ? 'Acima do limite de revisão' : items.length > 0 ? 'Prontos para aplicação' : 'Sem itens identificados'}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">{itemCount > NFE_ITEM_REVIEW_LIMIT ? 'Os itens ficam para lançamento manual.' : 'A aplicação usa as decisões revisadas.'}</dd></div></dl></section><div className="flex flex-wrap justify-end gap-3"><button type="button" onClick={onBack} disabled={isConfirming} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar e revisar</button><button type="button" onClick={onConfirm} disabled={isConfirming} className="inline-flex items-center gap-2 rounded-xl bg-[#0B2551] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#12366f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50">{isConfirming && <Loader2 className="h-4 w-4 animate-spin" />}Confirmar e gravar</button></div></div>;
 
+const PdfSummaryState: React.FC<{ payload: NonNullable<ReturnType<typeof validateNfeProposalForm>['payload']>; supplierLabel: string; isConfirming: boolean; onBack: () => void; onConfirm: () => void }> = ({ payload, supplierLabel, isConfirming, onBack, onConfirm }) => <div className="mx-auto max-w-2xl space-y-5"><p role="status" className="rounded-xl border border-cyan-200 bg-cyan-50 p-3 text-sm font-medium text-cyan-900 dark:border-cyan-400/20 dark:bg-cyan-950/20 dark:text-cyan-100">{PDF_HEADER_ONLY_NOTICE}</p><section className="rounded-2xl border border-gray-200 p-5 dark:border-white/10"><h3 className="text-xl font-bold text-gray-900 dark:text-white">Confirmar importação do PDF</h3><dl className="mt-5 grid gap-4 sm:grid-cols-2"><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Fornecedor</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.supplier.name}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">{supplierLabel}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Compra</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{formatCurrency(payload.purchase.final_value)}</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Pagamento: outro</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Contas a pagar</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">{payload.purchase.installments.length} parcela(s)</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Total: {formatCurrency(payload.purchase.installments.reduce((total, installment) => total + installment.amount, 0))}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Itens, produtos e estoque</dt><dd className="mt-1 font-semibold text-gray-800 dark:text-gray-200">Não importados neste piloto</dd><dd className="text-sm text-gray-500 dark:text-gray-400">Nenhum item será aplicado automaticamente.</dd></div></dl></section><div className="flex flex-wrap justify-end gap-3"><button type="button" onClick={onBack} disabled={isConfirming} className="rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50 dark:border-white/10 dark:text-gray-200 dark:hover:bg-white/5">Voltar e revisar</button><button type="button" onClick={onConfirm} disabled={isConfirming} className="inline-flex items-center gap-2 rounded-xl bg-[#0B2551] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#12366f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 disabled:opacity-50">{isConfirming && <Loader2 className="h-4 w-4 animate-spin" />}Confirmar e gravar</button></div></div>;
+
 const SuccessState: React.FC<{ itemCount: number }> = ({ itemCount }) => <section className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-400/20 dark:bg-emerald-950/20"><CheckCircle2 className="h-9 w-9 text-emerald-600 dark:text-emerald-300" /><h3 className="text-xl font-bold text-emerald-950 dark:text-emerald-100">Importação concluída</h3>{itemCount > NFE_ITEM_REVIEW_LIMIT ? <VolumeNotice count={itemCount} /> : <p className="text-sm leading-6 text-emerald-900 dark:text-emerald-100">Fornecedor, compra, itens, produtos e estoque foram aplicados pela confirmação.</p>}</section>;
+
+const PdfSuccessState: React.FC = () => <section className="mx-auto max-w-2xl space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-400/20 dark:bg-emerald-950/20"><CheckCircle2 className="h-9 w-9 text-emerald-600 dark:text-emerald-300" /><h3 className="text-xl font-bold text-emerald-950 dark:text-emerald-100">Importação concluída</h3><p className="text-sm leading-6 text-emerald-900 dark:text-emerald-100">Fornecedor, compra e contas a pagar foram aplicados. {PDF_HEADER_ONLY_NOTICE}</p></section>;

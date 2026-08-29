@@ -44,6 +44,7 @@ import {
   createNfeProductCategory,
   getNfeProductCategories,
   getNfeProposalItems,
+  getNfeImportProposalByJobId,
   getDocumentImportErrorMessage,
   isNfeDocumentImportEligible,
   moneyToCents,
@@ -327,7 +328,22 @@ describe('documentImportService — contratos de extração e validação', () =
 
     const base = { category: 'nota_fiscal' as const, currentVersionId: 'version-1' };
     expect(isNfeDocumentImportEligible({ ...base, mimeType: 'application/xml' } as never)).toBe(true);
-    expect(isNfeDocumentImportEligible({ ...base, mimeType: 'application/pdf' } as never)).toBe(false);
+    expect(isNfeDocumentImportEligible({ ...base, mimeType: 'application/pdf' } as never)).toBe(true);
+    expect(isNfeDocumentImportEligible({ ...base, mimeType: 'application/pdf', currentVersionId: '' } as never)).toBe(false);
     expect(isNfeDocumentImportEligible({ ...base, mimeType: 'image/png' } as never)).toBe(false);
+  });
+
+  it('mapeia origem de modelo e trecho original sem quebrar origens legadas em string', async () => {
+    mocks.results.set('document_import_proposals', {
+      data: proposalRow({ field_origins: {
+        'supplier.name': { origin: 'model', source: 'RAZÃO SOCIAL: Fornecedor DANFE' },
+        'purchase.final_value': 'deterministic',
+      } }),
+      error: null,
+    });
+
+    const result = await getNfeImportProposalByJobId(JOB_ID);
+    expect(result?.fieldOrigins).toEqual({ 'supplier.name': 'model', 'purchase.final_value': 'deterministic' });
+    expect(result?.fieldSources).toEqual({ 'supplier.name': 'RAZÃO SOCIAL: Fornecedor DANFE' });
   });
 });

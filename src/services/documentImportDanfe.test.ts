@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractDanfeHeader, DanfeParserError } from './danfe.ts';
+import { extractDanfeHeader, DanfeParserError } from '../../supabase/functions/_shared/document-import/danfe.ts';
 
 const EMITTER = '12345678000195';
 const ACCESS_KEY_BASE = '352608' + EMITTER + '55001000000123112345678';
@@ -16,6 +16,8 @@ const checkDigit = (base: string): string => {
 };
 
 const ACCESS_KEY = ACCESS_KEY_BASE + checkDigit(ACCESS_KEY_BASE);
+const SECOND_ACCESS_KEY_BASE = ACCESS_KEY_BASE.slice(0, -1) + (ACCESS_KEY_BASE.endsWith('8') ? '7' : '8');
+const SECOND_ACCESS_KEY = SECOND_ACCESS_KEY_BASE + checkDigit(SECOND_ACCESS_KEY_BASE);
 const groupedAccessKey = ACCESS_KEY.match(/.{1,4}/g)?.join(' ') || ACCESS_KEY;
 
 const DANFE_TEXT = `CHAVE DE ACESSO: ${groupedAccessKey}
@@ -67,7 +69,14 @@ describe('adapter de DANFE em texto linear', () => {
     const invalidDigit = ACCESS_KEY.endsWith('9') ? '8' : '9';
     expect(parserCode(() => extractDanfeHeader(`CHAVE: ${ACCESS_KEY.slice(0, -1)}${invalidDigit}`))).toBe('pdf_access_key_invalid');
 
-    expect(parserCode(() => extractDanfeHeader(`${ACCESS_KEY}\nCHAVE: ${ACCESS_KEY}`))).toBe('pdf_access_key_ambiguous');
+    expect(parserCode(() => extractDanfeHeader(`${ACCESS_KEY}\nCHAVE: ${SECOND_ACCESS_KEY}`))).toBe('pdf_access_key_ambiguous');
+  });
+
+  it('aceita a mesma chave repetida no cabeçalho de cada página do DANFE', () => {
+    const proposal = extractDanfeHeader(`${DANFE_TEXT}\nCHAVE DE ACESSO: ${groupedAccessKey}`);
+
+    expect(proposal.idempotency_key).toBe(ACCESS_KEY);
+    expect(proposal.payload.supplier.document).toBe(EMITTER);
   });
 
   it('rejeita texto vazio e campos financeiros obrigatórios ausentes', () => {
@@ -81,3 +90,5 @@ describe('adapter de DANFE em texto linear', () => {
     expect(proposal.payload.purchase.installments).toEqual([{ amount: 1195, due_date: '2026-09-30T00:00:00Z' }]);
   });
 });
+
+

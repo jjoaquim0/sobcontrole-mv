@@ -1,0 +1,199 @@
+schema: 1
+story: "1.60"
+gate: FAIL
+status_reason: >-
+  O gate FAIL porque o adapter DANFE aceita uma chave válida repetida em duas ocorrências, embora o
+  requisito e o teste da story exijam erro explícito de ambiguidade; a reprodução isolada falha em 1 de
+  4 testes. Os gates globais passam sem regressão, mas a falha de idempotência/ambiguidade impede concluir
+  a story com segurança.
+reviewer: "Quinn"
+updated: "2026-08-29T15:07:23-03:00"
+transition: "InReview -> InProgress"
+
+user_decisions:
+  - "2026-08-29: CodeRabbit não foi executado, conforme brief e story; nenhum diff foi enviado a serviço externo."
+  - "2026-08-29: Nenhum deploy, migration, escrita em produção, push ou PR foi executado pelo @qa."
+  - "2026-08-29: A Edge Function document-extraction não foi publicada; deploy posterior depende de autorização explícita e @devops."
+
+preconditions:
+  result: PASS
+  verified_at: "2026-08-29"
+  operation: >-
+    Revisão local do commit 407ba3c, testes focados, quatro comandos de gate, auditoria de escopo e scan
+    de segurança nos arquivos de produção alterados; nenhuma operação externa mutável foi executada.
+  evidence:
+    - "Story encontrada inicialmente em InReview; brief/Story 1.60 foram lidos integralmente antes da revisão e a transição foi registrada após o veredito."
+    - "pdfjs-dist@6.3.289 confirmado por npm ls; build moderno e worker separado confirmados no dist."
+    - "nfe.ts, boleto.ts, vite.config.ts e .claude/launch.json não foram alterados no commit 407ba3c."
+    - "Nenhuma migration, deploy, push, PR ou CodeRabbit foi executado."
+  limitation: >-
+    A Edge Function não está publicada nesta versão e não houve E2E contra banco/produção; essa limitação
+    é operacional e não foi usada para mascarar a falha determinística do adapter.
+
+baseline:
+  source: "46edbe3, reproduzido em checkout temporário com os artefatos de runtime equivalentes do workspace"
+  measured_by: "@qa, 2026-08-29"
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas globais: 276 erros e 2 warnings."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "24 diagnósticos error TS preexistentes, fora dos arquivos da story."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "72 arquivos e 626 testes aprovados."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "3007 módulos transformados; warning informativo de chunk acima de 500 kB."
+
+final:
+  measured_by: "@qa, comandos executados separadamente em 2026-08-29"
+  lint:
+    command: "npm run lint"
+    exit_code: 1
+    result: "278 problemas globais: 276 erros e 2 warnings; sem erro nos arquivos alterados da story."
+  typecheck:
+    command: "npm run typecheck"
+    exit_code: 2
+    result: "24 diagnósticos error TS, mesmos diagnósticos preexistentes e fora dos arquivos da story."
+  test:
+    command: "npm test"
+    exit_code: 0
+    result: "74 arquivos e 642 testes aprovados; o teste supabase/functions/.../danfe.test.ts não é incluído pela configuração do Vitest."
+  build:
+    command: "npm run build"
+    exit_code: 0
+    result: "3010 módulos transformados; pdf-TtSH7s3_.js com 483151 bytes/144.26 kB gzip e worker separado com 1265413 bytes."
+
+focused:
+  tests:
+    command: >-
+      npx vitest run src/services/pdfTextExtractor.test.ts src/services/pdfDocumentImportService.test.ts
+      src/services/documentExtractionSecurity.test.ts src/services/documentImportService.test.ts
+      src/hooks/useDocumentImport.test.tsx src/pages/documents/components/DocumentImportReviewModal.test.tsx
+    exit_code: 0
+    result: "6 arquivos e 58 testes aprovados."
+  danfe_adapter:
+    command: "npx vitest run --config .qa-vitest.config.ts --reporter=verbose (configuração temporária, removida após a execução)"
+    exit_code: 1
+    result: "4 testes: 3 aprovados e 1 falho; repetição da mesma chave retorna pdf_required_field_missing em vez de pdf_access_key_ambiguous."
+    evidence:
+      - "supabase/functions/_shared/document-import/danfe.ts:157-165 usa Set<string>, que elimina ocorrências idênticas."
+      - "supabase/functions/_shared/document-import/danfe.test.ts:70 espera pdf_access_key_ambiguous para duas ocorrências da chave."
+  lint:
+    command: >-
+      npx eslint src/hooks/useDocumentImport.ts src/hooks/useDocumentImport.test.tsx
+      src/pages/documents/components/DocumentImportReviewModal.tsx
+      src/pages/documents/components/DocumentImportReviewModal.test.tsx
+      src/services/documentExtractionSecurity.test.ts src/services/documentImportService.ts
+      src/services/documentImportService.test.ts src/services/pdfDocumentImportService.test.ts
+      src/services/pdfTextExtractor.ts src/services/pdfTextExtractor.test.ts src/pdfjs.d.ts
+      supabase/functions/_shared/document-import/danfe.ts
+      supabase/functions/_shared/document-import/danfe.test.ts
+      supabase/functions/_shared/document-import/handler.ts --report-unused-disable-directives --max-warnings 0
+    exit_code: 0
+    result: "0 erros e 0 warnings nos arquivos da story."
+  security_scan:
+    result: PASS
+    checks: 8
+    files: 7
+    finding: "Nenhum match de eval/dynamic code, DOM XSS, dangerouslySetInnerHTML, shell injection, segredo hardcoded, SQL injection, acesso req.* sem validação ou CORS inseguro nos arquivos de produção alterados."
+  dependency_audit:
+    command: "npm audit --omit=dev --audit-level=high"
+    exit_code: 0
+    result: "Sem vulnerabilidades high/critical; duas vulnerabilidades moderate preexistentes em react-router."
+  scope_audit:
+    result: PASS
+    evidence:
+      - "git show --stat 407ba3c registra 17 arquivos no commit sob avaliação."
+      - "A comparação 46edbe3..407ba3c lista 18 arquivos porque inclui o README da pesquisa do commit pai e64dcfc."
+      - "Nenhuma migration e nenhum arquivo proibido foi alterado; git diff --check não encontrou erro."
+      - "O caminho PDF envia somente document_version_id e extracted_text; o handler deriva empresa/categoria e rejeita campos extras."
+      - "O caminho PDF cria items = [] e a UI oculta tabela de itens, produtos e estoque."
+
+acceptance_criteria:
+  AC1:
+    result: PASS
+    evidence: "Elegibilidade aceita nota_fiscal com application/pdf e currentVersionId; XML e tipos não elegíveis permanecem cobertos pelo serviço."
+    limitation: "O teste do CTA usa elegibilidade mockada e não há E2E autenticado."
+  AC2:
+    result: PASS
+    evidence: "pdf.js é importado dinamicamente, worker usa new URL(..., import.meta.url), download local e body do handler contém somente document_version_id/extracted_text."
+    limitation: "A Edge Function publicada não foi exercitada."
+  AC3:
+    result: CONCERNS
+    evidence: "Build mantém chunks PDF fora do first-load e a UI possui status aria-live durante a leitura. operationRef bloqueia concorrência."
+    limitation: "Não há teste específico de viewport/conexão móvel nem asserção de duplo envio; a referência de aproximadamente 505 KB gzip não foi tratada como constante."
+  AC4:
+    result: PASS
+    evidence: "Handler autentica, resolve versão sob a sessão, usa companyId do documento autorizado, retorna 404 na fronteira cross-tenant e rejeita body com campos extras antes da autenticação."
+    limitation: "Sem sessão/RLS E2E contra banco não produtivo."
+  AC5:
+    result: PASS
+    evidence: "Extrator percorre todas as páginas, faz trim de item.str, conta caracteres não-espaço, retorna mensagem literal de escaneado e oferece Salvar só o arquivo; testes de UI/serviço passam."
+    limitation: "Sem fixture PDF binária real e sem validação manual em browser autenticado."
+  AC6:
+    result: FAIL
+    evidence: "O caso obrigatório de múltiplas candidatas falha: duas ocorrências da mesma chave válida são deduplicadas pelo Set e não viram pdf_access_key_ambiguous."
+    limitation: "A mutação do handler já foi comprovada no brief e não foi repetida."
+  AC7:
+    result: PASS
+    evidence: "O teste focado do handler confirma chave validada, proposta pending, text_origin=client, field origins/fontes e payload de cabeçalho; rotas XML/boleto ficaram intactas."
+    limitation: "O teste dedicado do adapter não entra no npm test padrão."
+  AC8:
+    result: PASS
+    evidence: "Adapter e handler produzem items = []; createProposal não insere itens quando a lista está vazia; revisão, resumo e sucesso PDF não prometem produtos/estoque."
+    limitation: "Não houve confirmação positiva no banco."
+  AC9:
+    result: PASS
+    evidence: "Aviso exato de origem client aparece no topo antes dos campos, com aria-live/role alert e trechos por campo; não aparece no caminho XML testado."
+    limitation: "A validação visual manual de temas e leitor de tela não foi possível nesta sessão."
+  AC10:
+    result: PASS
+    evidence: "Hook e componente cobrem revisão, resumo, confirming, success, falhas, retry, validação financeira e preservação do arquivo por ação de fechamento."
+    limitation: "Aplicação/RPC e atomicidade permanecem sem E2E de banco."
+  AC11:
+    result: FAIL
+    evidence: "Falha de leitura por chave ambígua não satisfaz o requisito de erro explícito antes de criar proposta; o teste correspondente falha quando executado isoladamente."
+  AC12:
+    result: PASS
+    evidence: "Lint/typecheck/test/build não têm regressão numérica atribuível ao commit; diff e arquivos proibidos foram auditados."
+  AC13:
+    result: PASS
+    evidence: "Nenhum deploy, migration, escrita em produção, push, PR ou CodeRabbit ocorreu; a dependência operacional foi mantida explícita."
+
+resolved_issues: []
+
+top_issues:
+  - id: "REQ-001"
+    severity: high
+    status: open
+    finding: "O adapter trata duas ocorrências da mesma chave de acesso válida como uma única candidata, aceitando o fluxo em vez de rejeitar ambiguidade; o teste obrigatório falha."
+    suggested_action: "Preservar a contagem/posição das ocorrências válidas e rejeitar qualquer PDF com mais de uma ocorrência, inclusive quando os valores forem idênticos; adicionar o teste ao conjunto executado pelo npm test."
+  - id: "TEST-001"
+    severity: medium
+    status: open
+    finding: "danfe.test.ts está fora do include do Vitest (vite.config.ts inclui apenas src/**/*.{test,spec}.{ts,tsx}), ocultando a falha do adapter na suíte de 642 testes."
+    suggested_action: "Incluir os testes da Edge Function na configuração de teste ou criar um comando de gate que sempre os execute."
+  - id: "TEST-002"
+    severity: medium
+    status: open
+    finding: "AC3 não tem prova específica de viewport/conexão móvel e submissão duplicada; a implementação tem indicador aria-live e guarda de operação, mas não há asserções dedicadas."
+    suggested_action: "Adicionar testes de componente/hook para conexão móvel simulada, primeiro carregamento, indicador e duas chamadas concorrentes."
+  - id: "TEST-003"
+    severity: medium
+    status: dependency_open
+    finding: "Não há E2E de banco nem execução da Edge Function publicada; a taxa de acerto em DANFEs reais permanece desconhecida conforme o brief."
+    suggested_action: "Após autorização, publicar via @devops e validar com ambiente não produtivo e 10–20 DANFEs reais de emissores diferentes."
+  - id: "OPS-001"
+    severity: low
+    status: documented_condition
+    finding: "document-extraction não foi publicada com o código desta story."
+    suggested_action: "Solicitar autorização operacional e encaminhar o deploy exclusivamente ao @devops; revalidar o runtime depois."
+
+waiver:
+  active: false

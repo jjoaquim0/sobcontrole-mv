@@ -678,3 +678,83 @@ export interface AnalyticsModuleHistoryEntry {
   note?: string;
   performedAt: string;
 }
+
+// Contratos terceirizados (Story 1.62)
+export type ServiceContractStatus = 'draft' | 'active' | 'suspended' | 'closed';
+export type ContractValidationStatus = 'pending' | 'confirmed' | 'historical';
+export type ContractVersionKind = 'original' | 'amendment';
+export type ServicePostStatus = 'active' | 'inactive';
+export type PostAllocationRole = 'holder' | 'substitute';
+
+export interface ServiceContract {
+  id: string;
+  companyId: string;
+  customerId?: string;
+  clientName: string;
+  title: string;
+  contractNumber?: string;
+  location?: string;
+  scopeSummary?: string;
+  startDate?: string;
+  endDate?: string;
+  cctReference?: string;
+  sourceDocumentsUrl?: string;
+  validationStatus: ContractValidationStatus;
+  status: ServiceContractStatus;
+  internalNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ServiceContractVersion {
+  id: string;
+  contractId: string;
+  versionNumber: number;
+  kind: ContractVersionKind;
+  title: string;
+  signedAt?: string;
+  effectiveStart?: string;
+  effectiveEnd?: string;
+  documentUrl?: string;
+  changeSummary?: string;
+  validationStatus: ContractValidationStatus;
+  createdAt: string;
+}
+
+export interface ServicePost {
+  id: string;
+  contractId: string;
+  name: string;
+  jobFunction: string;
+  workSchedule: string;
+  requiredHeadcount: number;
+  operationalManagerId?: string;
+  operationalManagerName?: string;
+  requirements?: string;
+  status: ServicePostStatus;
+  createdAt: string;
+}
+
+export interface PostAllocation {
+  id: string;
+  postId: string;
+  employeeId: string;
+  employeeName: string;
+  allocationRole: PostAllocationRole;
+  startDate: string;
+  endDate?: string;
+  endReason?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface ServiceContractAuditEvent {
+  id: string;
+  contractId?: string;
+  entityType: 'contract' | 'contract_version' | 'post' | 'allocation';
+  entityId: string;
+  eventType: string;
+  changedFields: string[];
+  actorName: string;
+  createdAt: string;
+}

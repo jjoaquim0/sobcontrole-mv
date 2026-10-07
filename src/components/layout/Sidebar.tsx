@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useAnalyticsModules } from '../../hooks/useAnalyticsModules';
+import { isContractsModuleEnabled } from '../../lib/features';
 import { UserRole } from '../../types';
 import { REPORT_NAVIGATION_ITEMS, ReportsMenuIcon, type ReportNavigationItem } from '../../pages/reports/reportNavigation';
 import { Logo, LogoAppIcon } from '../shared/brand';
@@ -111,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Gestão',
       items: [
         { name: 'Financeiro', path: '/financial', icon: CreditCard, roles: ['admin', 'manager'] },
-        { name: 'Contratos', path: '/contratos', icon: FileSignature, roles: ['admin', 'manager'] },
+        ...(isContractsModuleEnabled() ? [{ name: 'Contratos', path: '/contratos', icon: FileSignature, roles: ['admin', 'manager'] as UserRole[] }] : []),
         {
           name: 'Pessoas',
           path: '/pessoas',

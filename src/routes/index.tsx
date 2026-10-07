@@ -40,6 +40,7 @@ import { Profile } from '../pages/profile';
 import { Admin } from '../pages/admin';
 import { MvAmbientalRoadmapPage } from '../pages/roadmap';
 import { ContractDetailPage, ContractsPage } from '../pages/contracts';
+import { isContractsModuleEnabled } from '../lib/features';
 
 export const router = createBrowserRouter([
   // Página inicial pública de marketing/landing
@@ -162,22 +163,25 @@ export const router = createBrowserRouter([
           </RoleRoute>
         ),
       },
-      {
-        path: 'contratos',
-        element: (
-          <RoleRoute allowedRoles={['admin', 'manager']}>
-            <ContractsPage />
-          </RoleRoute>
-        ),
-      },
-      {
-        path: 'contratos/:id',
-        element: (
-          <RoleRoute allowedRoles={['admin', 'manager']}>
-            <ContractDetailPage />
-          </RoleRoute>
-        ),
-      },
+      // Contratos (Story 1.62): só no deploy ligado ao banco sobcontrole-mv.
+      ...(isContractsModuleEnabled() ? [
+        {
+          path: 'contratos',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <ContractsPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'contratos/:id',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <ContractDetailPage />
+            </RoleRoute>
+          ),
+        },
+      ] : []),
       {
         path: 'pessoas/funcionarios',
         element: (

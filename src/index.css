@@ -489,3 +489,32 @@
     padding-right: 0;
   }
 }
+
+/* Impressão de páginas de apresentação (ex.: Roadmap MV Ambiental): esconde a
+   moldura da aplicação e libera o scroll interno para o conteúdo paginar. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body,
+  #root,
+  #root > div,
+  #root main {
+    height: auto !important;
+    width: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  #root aside,
+  #root header,
+  #root .panel-glass,
+  #root .fixed {
+    display: none !important;
+  }
+
+  #root main {
+    padding: 0 !important;
+  }
+}

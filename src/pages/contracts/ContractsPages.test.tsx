@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ContractDetails, ContractListItem } from '@/services/contractsService';
 import { ContractDetailPage } from './ContractDetailPage';
@@ -79,6 +79,27 @@ describe('ContractDetailPage', () => {
 
     const jardinagem = screen.getByRole('article', { name: 'Posto Jardinagem' });
     expect(within(jardinagem).getByRole('button', { name: /Alocar funcionário/ })).toBeDisabled();
+  });
+
+  it('abre demanda de reposição a partir do posto ativo', () => {
+    const LocationProbe = () => { const location = useLocation(); return <p data-testid="location">{location.pathname}{location.search}</p>; };
+    state.details = {
+      contract: contract(),
+      versions: [],
+      posts: [
+        { id: 'p1', contractId: 'c1', name: 'Portaria A', jobFunction: 'Porteiro', workSchedule: '12x36', requiredHeadcount: 2, status: 'active', createdAt: '' },
+        { id: 'p2', contractId: 'c1', name: 'Jardinagem', jobFunction: 'Jardineiro', workSchedule: '44h', requiredHeadcount: 1, status: 'inactive', createdAt: '' },
+      ],
+      allocations: [],
+      audit: [],
+    } satisfies ContractDetails;
+    render(
+      <MemoryRouter initialEntries={['/contratos/c1']}><Routes><Route path="/contratos/:id" element={<ContractDetailPage />} /><Route path="/demandas" element={<LocationProbe />} /></Routes></MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Postos e alocações/ }));
+    expect(within(screen.getByRole('article', { name: 'Posto Jardinagem' })).getByRole('button', { name: /Abrir demanda de reposição/ })).toBeDisabled();
+    fireEvent.click(within(screen.getByRole('article', { name: 'Posto Portaria A' })).getByRole('button', { name: /Abrir demanda de reposição/ }));
+    expect(screen.getByTestId('location')).toHaveTextContent('/demandas?nova=reposicao&posto=p1');
   });
 
   it('não renderiza links de documento fora de https', () => {

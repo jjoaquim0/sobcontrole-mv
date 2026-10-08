@@ -38,6 +38,7 @@ import {
   Target,
   Map as MapIcon,
   FileSignature,
+  ClipboardList,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -112,7 +113,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       title: 'Gestão',
       items: [
         { name: 'Financeiro', path: '/financial', icon: CreditCard, roles: ['admin', 'manager'] },
-        ...(isContractsModuleEnabled() ? [{ name: 'Contratos', path: '/contratos', icon: FileSignature, roles: ['admin', 'manager'] as UserRole[] }] : []),
+        ...(isContractsModuleEnabled() ? [
+          { name: 'Contratos', path: '/contratos', icon: FileSignature, roles: ['admin', 'manager'] as UserRole[] },
+          { name: 'Demandas', path: '/demandas', icon: ClipboardList, roles: ['admin', 'manager'] as UserRole[] },
+        ] : []),
         {
           name: 'Pessoas',
           path: '/pessoas',

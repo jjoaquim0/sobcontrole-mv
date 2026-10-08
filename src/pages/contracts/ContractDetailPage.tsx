@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, FileStack, History, LayoutList, Loader2, Pencil, Plus, UserMinus, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, ExternalLink, FileStack, History, LayoutList, Loader2, Pencil, Plus, UserMinus, UserPlus, Users, UserRoundSearch } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useContractDetails } from '@/hooks/useContracts';
 import { useEmployees } from '@/hooks/usePeople';
@@ -171,6 +171,7 @@ export const ContractDetailPage = () => {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button type="button" disabled={post.status !== 'active'} title={post.status !== 'active' ? 'Ative o posto para alocar' : undefined} onClick={() => setAllocatingPost(post)} className={primaryButtonClass}><UserPlus className="h-4 w-4" />Alocar funcionário</button>
                   <button type="button" onClick={() => setPostModal({ open: true, post })} className={secondaryButtonClass}><Pencil className="h-4 w-4" />Editar posto</button>
+                  <button type="button" disabled={post.status !== 'active'} onClick={() => navigate(`/demandas?nova=reposicao&posto=${post.id}`)} className={secondaryButtonClass}><UserRoundSearch className="h-4 w-4" />Abrir demanda de reposição</button>
                 </div>
               </article>
             );

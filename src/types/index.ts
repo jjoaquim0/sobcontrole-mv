@@ -987,3 +987,63 @@ export interface ObligationEvent {
   actorName: string;
   createdAt: string;
 }
+
+// ---------------------------------------------------------------------------
+// Piloto MV Ambiental (Story 1.66)
+// ---------------------------------------------------------------------------
+
+export type PilotSnapshotKind = 'baseline' | 'checkpoint' | 'final';
+export type PilotDecision = 'expand' | 'adjust' | 'pause';
+
+export interface PilotAcceptanceEvidence {
+  contractsConfirmed: number;
+  activePosts: number;
+  activeAllocations: number;
+  demandsFullFlow: number;
+  periodsControlled: number;
+  itemsOpenWithoutResponsible: number;
+}
+
+export interface PilotMetrics {
+  periodFrom: string;
+  periodTo: string;
+  computedAt: string;
+  demandsClosed: number;
+  demandsClosedOnTime: number;
+  demandsOnTimePct: number | null;
+  demandsOpenWithoutResponsible: number;
+  demandsOpenOverdue: number;
+  replacementsClosed: number;
+  replacementAvgDays: number | null;
+  obligationItemsDue: number;
+  obligationItemsOnTime: number;
+  obligationItemsOnTimePct: number | null;
+  packagesReady: number;
+  packagesSent: number;
+  usersTotal: number;
+  usersActive: number;
+  usersActivePct: number | null;
+  acceptance: PilotAcceptanceEvidence;
+}
+
+export interface PilotSnapshot {
+  id: string;
+  label: string;
+  kind: PilotSnapshotKind;
+  periodFrom: string;
+  periodTo: string;
+  metrics: PilotMetrics;
+  offlineSteps?: number;
+  notes?: string;
+  decision?: PilotDecision;
+  createdByName?: string;
+  createdAt: string;
+}
+
+export interface PilotCriterionConfirmation {
+  criterion: number;
+  isConfirmed: boolean;
+  note?: string;
+  updatedByName?: string;
+  updatedAt: string;
+}

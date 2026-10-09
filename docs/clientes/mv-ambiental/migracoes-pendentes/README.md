@@ -15,6 +15,7 @@ Projeto Supabase **sobcontrole-mv** (`auljcdljjkplupgebewy`).
 | `20261008120000_service_demands.sql` (Story 1.63 — demandas, etapas, comentários, evidências e histórico) | ✅ Aplicada no sobcontrole-mv em 2026-10-09 em 6 partes (6 tabelas com RLS, 6 policies, 8 triggers, 10 RPCs) |
 | `20261009120000_service_people_documents.sql` (Story 1.64 — checklist de documentos, férias/afastamentos, uniformes/EPIs e transferência) | ✅ Aplicada no sobcontrole-mv em 2026-10-09 em 5 partes (5 tabelas com RLS, 5 policies, 8 triggers, 8 RPCs só para authenticated) |
 | `20261010120000_service_obligations.sql` (Story 1.65 — obrigações recorrentes, competências mensais, conferência e envio) | ✅ Aplicada no sobcontrole-mv em 2026-10-09 em 5 partes (4 tabelas com RLS, 4 policies, 6 triggers, 10 RPCs só para authenticated) |
+| `20261011120000_service_pilot.sql` (Story 1.66 — indicadores do piloto, medições, critérios de aceite e decisão) | ✅ Aplicada no sobcontrole-mv em 2026-10-09 em 3 partes (2 tabelas com RLS, 2 policies, 1 trigger, 3 RPCs só para authenticated) |
 
 Fora do clone (configurar no painel do projeto novo quando o app for apontado para ele):
 Edge Functions e seus secrets, configurações de Auth (URLs de redirecionamento, SMTP) e arquivos do Storage.

@@ -45,6 +45,7 @@ import { PeopleDocsPage } from '../pages/peopleDocs';
 import { ObligationsPage } from '../pages/obligations';
 import { OperationalPanelPage } from '../pages/operationalPanel';
 import { InitialImportPage } from '../pages/initialImport';
+import { PilotPage } from '../pages/pilot';
 import { isContractsModuleEnabled } from '../lib/features';
 
 export const router = createBrowserRouter([
@@ -231,6 +232,14 @@ export const router = createBrowserRouter([
           element: (
             <RoleRoute allowedRoles={['admin', 'manager']}>
               <InitialImportPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'piloto',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <PilotPage />
             </RoleRoute>
           ),
         },

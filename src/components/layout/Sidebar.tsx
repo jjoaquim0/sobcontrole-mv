@@ -43,6 +43,7 @@ import {
   CalendarCheck2,
   Gauge,
   FileUp,
+  Flag,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -124,6 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
           { name: 'Documentação e EPIs', path: '/documentacao', icon: FileCheck2, roles: ['admin', 'manager'] as UserRole[] },
           { name: 'Obrigações', path: '/obrigacoes', icon: CalendarCheck2, roles: ['admin', 'manager'] as UserRole[] },
           { name: 'Importação inicial', path: '/importacao', icon: FileUp, roles: ['admin', 'manager'] as UserRole[] },
+          { name: 'Piloto', path: '/piloto', icon: Flag, roles: ['admin', 'manager'] as UserRole[] },
         ] : []),
         {
           name: 'Pessoas',

@@ -42,6 +42,9 @@ import { MvAmbientalRoadmapPage } from '../pages/roadmap';
 import { ContractDetailPage, ContractsPage } from '../pages/contracts';
 import { DemandDetailPage, DemandsPage } from '../pages/demands';
 import { PeopleDocsPage } from '../pages/peopleDocs';
+import { ObligationsPage } from '../pages/obligations';
+import { OperationalPanelPage } from '../pages/operationalPanel';
+import { InitialImportPage } from '../pages/initialImport';
 import { isContractsModuleEnabled } from '../lib/features';
 
 export const router = createBrowserRouter([
@@ -204,6 +207,30 @@ export const router = createBrowserRouter([
           element: (
             <RoleRoute allowedRoles={['admin', 'manager']}>
               <PeopleDocsPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'obrigacoes',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <ObligationsPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'painel-operacional',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <OperationalPanelPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'importacao',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <InitialImportPage />
             </RoleRoute>
           ),
         },

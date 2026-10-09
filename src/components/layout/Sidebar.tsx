@@ -40,6 +40,9 @@ import {
   FileSignature,
   ClipboardList,
   FileCheck2,
+  CalendarCheck2,
+  Gauge,
+  FileUp,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -115,9 +118,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       items: [
         { name: 'Financeiro', path: '/financial', icon: CreditCard, roles: ['admin', 'manager'] },
         ...(isContractsModuleEnabled() ? [
+          { name: 'Painel operacional', path: '/painel-operacional', icon: Gauge, roles: ['admin', 'manager'] as UserRole[] },
           { name: 'Contratos', path: '/contratos', icon: FileSignature, roles: ['admin', 'manager'] as UserRole[] },
           { name: 'Demandas', path: '/demandas', icon: ClipboardList, roles: ['admin', 'manager'] as UserRole[] },
           { name: 'Documentação e EPIs', path: '/documentacao', icon: FileCheck2, roles: ['admin', 'manager'] as UserRole[] },
+          { name: 'Obrigações', path: '/obrigacoes', icon: CalendarCheck2, roles: ['admin', 'manager'] as UserRole[] },
+          { name: 'Importação inicial', path: '/importacao', icon: FileUp, roles: ['admin', 'manager'] as UserRole[] },
         ] : []),
         {
           name: 'Pessoas',

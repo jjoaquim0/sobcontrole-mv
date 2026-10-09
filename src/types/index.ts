@@ -919,3 +919,71 @@ export interface PeopleEvent {
   actorName: string;
   createdAt: string;
 }
+
+// Obrigações e competências (Story 1.65)
+export type ObligationRecurrence = 'monthly' | 'quarterly' | 'yearly';
+export type ObligationPeriodStatus = 'open' | 'ready' | 'sent';
+export type ObligationItemStatus = 'pending' | 'submitted' | 'verified' | 'rejected' | 'waived';
+
+export interface ObligationTemplate {
+  id: string;
+  contractId?: string;
+  contractTitle?: string;
+  name: string;
+  description?: string;
+  recurrence: ObligationRecurrence;
+  referenceMonth?: number;
+  dueDay: number;
+  dueMonthOffset: number;
+  defaultResponsibleId?: string;
+  defaultResponsibleName?: string;
+  requiresEvidence: boolean;
+  isActive: boolean;
+}
+
+export interface ObligationPeriod {
+  id: string;
+  contractId: string;
+  contractTitle: string;
+  competence: string;
+  status: ObligationPeriodStatus;
+  readyAt?: string;
+  readyByName?: string;
+  sentOn?: string;
+  sentTo?: string;
+  sentProofUrl?: string;
+  sentByName?: string;
+  notes?: string;
+}
+
+export interface ObligationItem {
+  id: string;
+  periodId: string;
+  templateId?: string;
+  name: string;
+  description?: string;
+  dueDate: string;
+  responsibleId?: string;
+  responsibleName?: string;
+  requiresEvidence: boolean;
+  status: ObligationItemStatus;
+  evidenceUrl?: string;
+  submissionNote?: string;
+  submittedByName?: string;
+  submittedAt?: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
+export interface ObligationEvent {
+  id: string;
+  contractId?: string;
+  periodId?: string;
+  entityType: 'template' | 'period' | 'item';
+  eventType: string;
+  changedFields: string[];
+  note?: string;
+  actorName: string;
+  createdAt: string;
+}

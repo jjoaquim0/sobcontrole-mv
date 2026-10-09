@@ -14,6 +14,7 @@ import {
 import { toast } from 'sonner';
 import { AlertCircle, CalendarClock, ClipboardCheck, Inbox, Loader2, Plus, Search, Settings2, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { HowToPanel } from '@/components/shared/HowToPanel';
 import { useDemandLinkOptions, useDemands, useDemandTypes } from '@/hooks/useDemands';
 import { useAuthStore } from '@/store/authStore';
 import { DemandStage, ServiceDemand } from '@/types';
@@ -135,6 +136,15 @@ export const DemandsPage = () => {
             <button type="button" disabled={activeTypes.length === 0} onClick={() => setCreateState({ open: true, defaults: { typeId: selectedType?.isActive ? selectedType.id : undefined } })} className={primaryButtonClass}><Plus className="h-4 w-4" />Nova demanda</button>
           </div>
         }
+      />
+      <HowToPanel
+        id="demandas"
+        steps={[
+          'Abra a demanda com tipo, prazo, responsável e aprovador. Vincule contrato, posto ou funcionário quando houver.',
+          'Arraste o cartão uma etapa por vez. Para voltar, informe o motivo.',
+          'Registre comentários e evidências (links do Drive) no detalhe da demanda.',
+          'Somente o aprovador encerra a partir da conferência.',
+        ]}
       />
 
       {isTypesError ? (

@@ -1,0 +1,1 @@
+export { ObligationsPage } from './ObligationsPage';

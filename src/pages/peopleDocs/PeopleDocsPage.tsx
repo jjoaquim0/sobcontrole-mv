@@ -5,6 +5,7 @@ import {
   Loader2, Pencil, Plus, ShieldCheck, Undo2, Upload, X,
 } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { HowToPanel } from '@/components/shared/HowToPanel';
 import { usePeopleDocs } from '@/hooks/usePeopleDocs';
 import { DocumentRequirement, EmployeeAbsence, EquipmentDelivery } from '@/types';
 import { cardClass, inputClass, primaryButtonClass, secondaryButtonClass } from '@/pages/contracts/components/ContractPrimitives';
@@ -136,6 +137,16 @@ export const PeopleDocsPage = () => {
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader title="Pessoas e documentos" subtitle="Documentos exigidos, férias e afastamentos, uniformes e EPIs dos funcionários alocados." />
+      <HowToPanel
+        id="documentacao"
+        steps={[
+          'Na aba Checklist, cadastre os documentos exigidos de cada funcionário alocado ou do contrato, com a validade.',
+          'Em Pendências, registre a entrega (link do Drive) e confira ou recuse com motivo.',
+          'Registre férias e afastamentos: o titular ausente deixa de cobrir o posto na tela do contrato.',
+          'Registre entregas de uniforme e EPI com o CA e a data de troca.',
+        ]}
+        note="Não registre diagnóstico ou CID nas observações de afastamento."
+      />
 
       <section className={`${cardClass} grid grid-cols-1 gap-3 sm:grid-cols-2`} aria-label="Filtros">
         <label><span className="mb-1.5 block text-xs font-semibold text-gray-600 dark:text-gray-300">Contrato</span>

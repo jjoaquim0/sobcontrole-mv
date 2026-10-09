@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, AlertTriangle, CalendarClock, Eye, FileSignature, Pencil, Plus, RefreshCw, Search, ShieldAlert, X } from 'lucide-react';
 import { DataTable } from '@/components/shared/DataTable';
 import { PageHeader } from '@/components/shared/PageHeader';
+import { HowToPanel } from '@/components/shared/HowToPanel';
 import { useContracts } from '@/hooks/useContracts';
 import { ContractListItem } from '@/services/contractsService';
 import { ContractValidationStatus, ServiceContractStatus } from '@/types';
@@ -76,6 +77,15 @@ export const ContractsPage = () => {
   return (
     <div className="space-y-5 animate-fade-in">
       <PageHeader title="Contratos" subtitle="Contratos de serviço, postos de trabalho e quem está alocado em cada um." action={<button type="button" onClick={openCreate} className={primaryButtonClass}><Plus className="h-4 w-4" />Cadastrar contrato</button>} />
+      <HowToPanel
+        id="contratos"
+        steps={[
+          'Cadastre o contrato com o arquivo de origem e a vigência. Ele só fica ativo depois que a vigência for conferida.',
+          'Registre aditivos na aba Versões; o histórico nunca é sobrescrito.',
+          'Na aba Postos, cadastre cada posto com função, escala e quantidade, e aloque titulares e substitutos.',
+          'Posto descoberto aparece em vermelho. Abra a demanda de reposição direto do posto.',
+        ]}
+      />
 
       <p className="rounded-xl border border-cyan-100 bg-cyan-50/60 px-4 py-3 text-xs text-cyan-900 dark:border-cyan-400/15 dark:bg-cyan-400/5 dark:text-cyan-100">
         As datas e regras vêm do que o gestor informa. O sistema não interpreta convenções coletivas nem declara conformidade trabalhista.

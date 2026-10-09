@@ -40,6 +40,7 @@ import { Profile } from '../pages/profile';
 import { Admin } from '../pages/admin';
 import { MvAmbientalRoadmapPage } from '../pages/roadmap';
 import { ContractDetailPage, ContractsPage } from '../pages/contracts';
+import { DemandDetailPage, DemandsPage } from '../pages/demands';
 import { isContractsModuleEnabled } from '../lib/features';
 
 export const router = createBrowserRouter([
@@ -178,6 +179,22 @@ export const router = createBrowserRouter([
           element: (
             <RoleRoute allowedRoles={['admin', 'manager']}>
               <ContractDetailPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'demandas',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <DemandsPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'demandas/:id',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <DemandDetailPage />
             </RoleRoute>
           ),
         },

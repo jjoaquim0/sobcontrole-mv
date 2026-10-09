@@ -758,3 +758,82 @@ export interface ServiceContractAuditEvent {
   actorName: string;
   createdAt: string;
 }
+
+// Demandas operacionais (Story 1.63)
+export type DemandStageCategory = 'intake' | 'triage' | 'execution' | 'review' | 'done';
+export type DemandPriority = 'low' | 'normal' | 'high' | 'urgent';
+export type DemandStatus = 'open' | 'closed' | 'canceled';
+
+export interface DemandStage {
+  id: string;
+  typeId: string;
+  name: string;
+  category: DemandStageCategory;
+  position: number;
+  isActive: boolean;
+}
+
+export interface DemandType {
+  id: string;
+  name: string;
+  description?: string;
+  defaultDueDays?: number;
+  isActive: boolean;
+  stages: DemandStage[];
+}
+
+export interface ServiceDemand {
+  id: string;
+  demandNumber: number;
+  typeId: string;
+  stageId: string;
+  title: string;
+  description?: string;
+  priority: DemandPriority;
+  dueDate?: string;
+  status: DemandStatus;
+  contractId?: string;
+  contractTitle?: string;
+  postId?: string;
+  postName?: string;
+  allocationId?: string;
+  employeeId?: string;
+  employeeName?: string;
+  responsibleId?: string;
+  responsibleName?: string;
+  approverId?: string;
+  approverName?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  closedAt?: string;
+  cancelReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DemandComment {
+  id: string;
+  body: string;
+  authorName: string;
+  createdAt: string;
+}
+
+export interface DemandEvidence {
+  id: string;
+  label: string;
+  url: string;
+  stageName?: string;
+  addedByName: string;
+  createdAt: string;
+}
+
+export interface DemandEvent {
+  id: string;
+  eventType: string;
+  fromStageName?: string;
+  toStageName?: string;
+  changedFields: string[];
+  note?: string;
+  actorName: string;
+  createdAt: string;
+}

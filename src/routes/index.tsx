@@ -38,7 +38,6 @@ import { Company } from '../pages/company';
 import { Settings } from '../pages/settings';
 import { Profile } from '../pages/profile';
 import { Admin } from '../pages/admin';
-import { MvAmbientalRoadmapPage } from '../pages/roadmap';
 import { ContractDetailPage, ContractsPage } from '../pages/contracts';
 import { DemandDetailPage, DemandsPage } from '../pages/demands';
 import { PeopleDocsPage } from '../pages/peopleDocs';
@@ -382,15 +381,6 @@ export const router = createBrowserRouter([
         element: (
           <RoleRoute allowedRoles={['admin', 'manager']}>
             <Settings />
-          </RoleRoute>
-        ),
-      },
-      {
-        // Apresentação de projeto para cliente: visível só para quem conduz a reunião.
-        path: 'projetos/mv-ambiental/roadmap',
-        element: (
-          <RoleRoute allowedRoles={['admin', 'manager']}>
-            <MvAmbientalRoadmapPage />
           </RoleRoute>
         ),
       },

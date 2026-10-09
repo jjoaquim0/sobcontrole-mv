@@ -36,7 +36,6 @@ import {
   WalletCards,
   Building,
   Target,
-  Map as MapIcon,
   FileSignature,
   ClipboardList,
   FileCheck2,
@@ -142,12 +141,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         },
         { name: 'Relatórios', path: '/relatorios', icon: ReportsMenuIcon, roles: ['admin', 'manager'], children: REPORT_NAVIGATION_ITEMS },
         { name: 'Documentos', path: '/documents', icon: FileText },
-      ],
-    },
-    {
-      title: 'Projetos',
-      items: [
-        { name: 'Roadmap MV Ambiental', path: '/projetos/mv-ambiental/roadmap', icon: MapIcon, roles: ['admin', 'manager'] },
       ],
     },
     {

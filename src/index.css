@@ -490,7 +490,7 @@
   }
 }
 
-/* Impressão de páginas de apresentação (ex.: Roadmap MV Ambiental): esconde a
+/* Impressão de páginas de apresentação: esconde a
    moldura da aplicação e libera o scroll interno para o conteúdo paginar. */
 @media print {
   @page {

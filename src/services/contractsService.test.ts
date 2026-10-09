@@ -12,7 +12,7 @@ import { allocateEmployee, contractErrorMessage, getContracts, saveContract } fr
 const tableData: Record<string, unknown[]> = {};
 const chain = (table: string) => {
   const builder: Record<string, unknown> = {};
-  ['select', 'eq', 'is', 'or', 'order', 'limit', 'single'].forEach((method) => { builder[method] = () => builder; });
+  ['select', 'eq', 'is', 'or', 'in', 'lte', 'gte', 'order', 'limit', 'single'].forEach((method) => { builder[method] = () => builder; });
   builder.then = (resolve: (value: unknown) => unknown) => resolve({ data: tableData[table] ?? [], error: null });
   return builder;
 };
@@ -83,5 +83,18 @@ describe('getContracts', () => {
 
     const filtered = await getContracts({ search: 'hospital' });
     expect(filtered.map((contract) => contract.id)).toEqual(['c2']);
+  });
+
+  it('não conta titular de férias como posto coberto', async () => {
+    tableData.service_contracts = [
+      { id: 'c1', company_id: 'company-1', client_name: 'Prefeitura', title: 'Limpeza sede', validation_status: 'confirmed', status: 'active', created_at: '', updated_at: '' },
+    ];
+    tableData.service_posts = [{ id: 'p1', contract_id: 'c1', required_headcount: 1, status: 'active' }];
+    tableData.service_post_allocations = [{ post_id: 'p1', employee_id: 'e1', allocation_role: 'holder', start_date: '2020-01-01', end_date: null }];
+    tableData.service_employee_absences = [{ employee_id: 'e1' }];
+
+    const [contract] = await getContracts();
+    expect(contract).toMatchObject({ requiredHeadcount: 1, uncoveredPositions: 1 });
+    tableData.service_employee_absences = [];
   });
 });

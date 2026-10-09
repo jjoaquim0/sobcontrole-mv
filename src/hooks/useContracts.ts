@@ -14,6 +14,8 @@ import {
   saveContract,
   saveContractVersion,
   savePost,
+  transferAllocation,
+  TransferAllocationInput,
 } from '@/services/contractsService';
 
 const onError = (error: Error) => toast.error(error.message);
@@ -68,6 +70,15 @@ export const useContractDetails = (id: string) => {
     onSuccess: () => { invalidate(); toast.success('Funcionário alocado no posto.'); },
     onError,
   });
+  const transfer = useMutation({
+    mutationFn: (input: TransferAllocationInput) => transferAllocation(input),
+    onSuccess: () => {
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ['people-docs'] });
+      toast.success('Funcionário transferido de posto.');
+    },
+    onError,
+  });
   const endAlloc = useMutation({
     mutationFn: (input: EndAllocationInput) => endAllocation(input),
     onSuccess: () => { invalidate(); toast.success('Alocação encerrada.'); },
@@ -84,6 +95,8 @@ export const useContractDetails = (id: string) => {
     isSavingPost: post.isPending,
     allocateEmployee: allocate.mutateAsync,
     isAllocating: allocate.isPending,
+    transferAllocation: transfer.mutateAsync,
+    isTransferring: transfer.isPending,
     endAllocation: endAlloc.mutateAsync,
     isEndingAllocation: endAlloc.isPending,
   };

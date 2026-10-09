@@ -58,3 +58,9 @@ export const endAllocationSchema = z.object({
   endDate: z.string().min(1, 'Informe a data de encerramento.'),
   endReason: z.string().trim().min(3, 'Informe o motivo do encerramento.').max(500, 'Use até 500 caracteres.'),
 });
+
+export const transferSchema = z.object({
+  toPostId: z.string().min(1, 'Selecione o posto de destino.'),
+  transferDate: z.string().min(1, 'Informe a data da transferência.'),
+  reason: z.string().trim().min(3, 'Informe o motivo da transferência.').max(500, 'Use até 500 caracteres.'),
+});

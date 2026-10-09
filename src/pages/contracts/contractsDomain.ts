@@ -147,7 +147,10 @@ export const isAllocationActive = (allocation: Pick<PostAllocation, 'startDate' 
 
 export interface PostCoverage {
   required: number;
+  /** Titulares em serviço no dia (alocados e fora de férias/afastamento). */
   holders: number;
+  /** Titulares alocados, mas em férias ou afastamento no dia. */
+  absentHolders: number;
   substitutes: number;
   /** Vagas de titular sem ninguém (titular ou substituto) cobrindo. */
   uncovered: number;
@@ -155,24 +158,29 @@ export interface PostCoverage {
 }
 
 /**
- * Cobertura do posto no dia. Substitutos cobrem vagas de titular em aberto
- * (férias, ausência), mas o posto continua sinalizado como "coberto por
- * substituto" para que a reposição definitiva seja acompanhada.
+ * Cobertura do posto no dia. Titular em férias ou afastamento não cobre a vaga.
+ * Substitutos cobrem vagas de titular em aberto, mas o posto continua
+ * sinalizado como "coberto por substituto" para que a reposição definitiva
+ * (ou o retorno do titular) seja acompanhada.
  */
 export const getPostCoverage = (
   post: Pick<ServicePost, 'id' | 'requiredHeadcount' | 'status'>,
-  allocations: Pick<PostAllocation, 'postId' | 'allocationRole' | 'startDate' | 'endDate'>[],
+  allocations: (Pick<PostAllocation, 'postId' | 'allocationRole' | 'startDate' | 'endDate'> & { employeeId?: string })[],
   today: string = todayIso(),
+  absentEmployeeIds: ReadonlySet<string> = new Set(),
 ): PostCoverage => {
   const active = allocations.filter((allocation) => allocation.postId === post.id && isAllocationActive(allocation, today));
-  const holders = active.filter((allocation) => allocation.allocationRole === 'holder').length;
-  const substitutes = active.length - holders;
+  const isAbsent = (allocation: { employeeId?: string }) => Boolean(allocation.employeeId && absentEmployeeIds.has(allocation.employeeId));
+  const allHolders = active.filter((allocation) => allocation.allocationRole === 'holder');
+  const holders = allHolders.filter((allocation) => !isAbsent(allocation)).length;
+  const absentHolders = allHolders.length - holders;
+  const substitutes = active.filter((allocation) => allocation.allocationRole === 'substitute' && !isAbsent(allocation)).length;
   const required = post.requiredHeadcount;
-  if (post.status === 'inactive') return { required, holders, substitutes, uncovered: 0, state: 'inactive' };
+  if (post.status === 'inactive') return { required, holders, absentHolders, substitutes, uncovered: 0, state: 'inactive' };
   const holderGap = Math.max(0, required - holders);
   const uncovered = Math.max(0, holderGap - substitutes);
   const state = uncovered > 0 ? 'uncovered' : holderGap > 0 ? 'covered_by_substitute' : 'covered';
-  return { required, holders, substitutes, uncovered, state };
+  return { required, holders, absentHolders, substitutes, uncovered, state };
 };
 
 /** Aceita somente links https para não renderizar esquemas perigosos em href. */

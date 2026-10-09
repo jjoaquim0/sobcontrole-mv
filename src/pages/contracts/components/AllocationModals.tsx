@@ -2,8 +2,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { allocationSchema, endAllocationSchema } from '../contractSchemas';
-import { AllocationInput, EndAllocationInput } from '@/services/contractsService';
+import { allocationSchema, endAllocationSchema, transferSchema } from '../contractSchemas';
+import { AllocationInput, EndAllocationInput, TransferAllocationInput } from '@/services/contractsService';
 import { Employee, PostAllocation, ServicePost } from '@/types';
 import { ALLOCATION_ROLE_LABELS, formatDate, todayIso } from '../contractsDomain';
 import { FieldError, FormModal, inputClass, labelClass } from './ContractPrimitives';
@@ -87,6 +87,56 @@ export const EndAllocationModal = ({ allocation, isLoading, onClose, onSave }: E
       <div className="grid grid-cols-1 gap-4">
         <label><span className={labelClass}>Data de encerramento *</span><input type="date" className={inputClass} {...register('endDate')} /><FieldError message={errors.endDate?.message} /></label>
         <label><span className={labelClass}>Motivo *</span><textarea rows={3} className={inputClass} placeholder="Ex.: remanejado para outro posto, desligamento, fim da cobertura de férias" {...register('endReason')} /><FieldError message={errors.endReason?.message} /></label>
+      </div>
+    </FormModal>
+  );
+};
+
+type TransferForm = z.infer<typeof transferSchema>;
+
+export interface TransferDestination {
+  id: string;
+  name: string;
+  jobFunction: string;
+  contractTitle: string;
+}
+
+export interface TransferAllocationModalProps {
+  allocation?: PostAllocation;
+  /** Postos ativos que podem receber o funcionário (o atual fica de fora). */
+  destinations: TransferDestination[];
+  isLoading?: boolean;
+  onClose: () => void;
+  onSave: (input: TransferAllocationInput) => Promise<void>;
+}
+
+export const TransferAllocationModal = ({ allocation, destinations, isLoading, onClose, onSave }: TransferAllocationModalProps) => {
+  const schema = transferSchema.refine((values) => !allocation || values.transferDate > allocation.startDate, {
+    path: ['transferDate'], message: 'A transferência deve ser posterior ao início da alocação atual.',
+  });
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<TransferForm>({ resolver: zodResolver(schema) });
+
+  useEffect(() => {
+    if (allocation) reset({ toPostId: '', transferDate: todayIso(), reason: '' });
+  }, [allocation, reset]);
+
+  const options = destinations.filter((destination) => destination.id !== allocation?.postId);
+
+  return (
+    <FormModal
+      isOpen={Boolean(allocation)}
+      size="md"
+      title="Transferir para outro posto"
+      subtitle={allocation ? `${allocation.employeeName} · ${ALLOCATION_ROLE_LABELS[allocation.allocationRole]} desde ${formatDate(allocation.startDate)}` : undefined}
+      isLoading={isLoading}
+      submitLabel="Transferir"
+      onClose={onClose}
+      onSubmit={handleSubmit((values) => allocation ? onSave({ ...values, allocationId: allocation.id }) : Promise.resolve())}
+    >
+      <div className="grid grid-cols-1 gap-4">
+        <label><span className={labelClass}>Posto de destino *</span><select className={inputClass} {...register('toPostId')}><option value="">Selecione</option>{options.map((destination) => <option key={destination.id} value={destination.id}>{destination.name} · {destination.jobFunction} · {destination.contractTitle}</option>)}</select><FieldError message={errors.toPostId?.message} /></label>
+        <label><span className={labelClass}>Começa no novo posto em *</span><input type="date" className={inputClass} {...register('transferDate')} /><FieldError message={errors.transferDate?.message} /><span className="mt-1 block text-[11px] text-gray-400">A alocação atual termina no dia anterior, com o mesmo papel no novo posto.</span></label>
+        <label><span className={labelClass}>Motivo *</span><textarea rows={3} className={inputClass} placeholder="Ex.: remanejamento pedido pelo cliente, cobertura de outro posto" {...register('reason')} /><FieldError message={errors.reason?.message} /></label>
       </div>
     </FormModal>
   );

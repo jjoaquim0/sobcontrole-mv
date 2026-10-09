@@ -41,6 +41,7 @@ import { Admin } from '../pages/admin';
 import { MvAmbientalRoadmapPage } from '../pages/roadmap';
 import { ContractDetailPage, ContractsPage } from '../pages/contracts';
 import { DemandDetailPage, DemandsPage } from '../pages/demands';
+import { PeopleDocsPage } from '../pages/peopleDocs';
 import { isContractsModuleEnabled } from '../lib/features';
 
 export const router = createBrowserRouter([
@@ -195,6 +196,14 @@ export const router = createBrowserRouter([
           element: (
             <RoleRoute allowedRoles={['admin', 'manager']}>
               <DemandDetailPage />
+            </RoleRoute>
+          ),
+        },
+        {
+          path: 'documentacao',
+          element: (
+            <RoleRoute allowedRoles={['admin', 'manager']}>
+              <PeopleDocsPage />
             </RoleRoute>
           ),
         },

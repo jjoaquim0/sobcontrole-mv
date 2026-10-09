@@ -837,3 +837,85 @@ export interface DemandEvent {
   actorName: string;
   createdAt: string;
 }
+
+// Pessoas e documentação (Story 1.64)
+export type DocumentTarget = 'employee' | 'contract';
+export type DocumentRecordStatus = 'submitted' | 'verified' | 'rejected';
+export type AbsenceKind = 'vacation' | 'medical_leave' | 'leave' | 'other';
+export type EquipmentCategory = 'uniform' | 'ppe';
+
+export interface DocumentRequirement {
+  id: string;
+  name: string;
+  description?: string;
+  target: DocumentTarget;
+  contractId?: string;
+  contractTitle?: string;
+  postId?: string;
+  postName?: string;
+  validityMonths?: number;
+  isActive: boolean;
+}
+
+export interface DocumentRecord {
+  id: string;
+  requirementId: string;
+  employeeId?: string;
+  contractId?: string;
+  status: DocumentRecordStatus;
+  issuedOn?: string;
+  expiresOn?: string;
+  documentUrl: string;
+  notes?: string;
+  submittedByName: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  createdAt: string;
+}
+
+export interface EmployeeAbsence {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  kind: AbsenceKind;
+  startDate: string;
+  endDate: string;
+  notes?: string;
+  canceledAt?: string;
+  cancelReason?: string;
+  createdAt: string;
+}
+
+export interface EquipmentDelivery {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  postId?: string;
+  postName?: string;
+  category: EquipmentCategory;
+  itemName: string;
+  quantity: number;
+  size?: string;
+  caNumber?: string;
+  deliveredOn: string;
+  replaceBy?: string;
+  evidenceUrl?: string;
+  notes?: string;
+  returnedOn?: string;
+  returnNote?: string;
+  createdAt: string;
+}
+
+export interface PeopleEvent {
+  id: string;
+  employeeId?: string;
+  employeeName?: string;
+  contractId?: string;
+  entityType: 'requirement' | 'document' | 'absence' | 'equipment';
+  eventType: string;
+  changedFields: string[];
+  note?: string;
+  actorName: string;
+  createdAt: string;
+}

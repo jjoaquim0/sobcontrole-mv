@@ -1,8 +1,10 @@
 import { supabase } from '@/lib/supabase';
 import { assertPeopleCompany } from '@/services/peopleService';
 import {
+  AbsenceKind,
   ContractValidationStatus,
   ContractVersionKind,
+  EmployeeAbsence,
   PostAllocation,
   PostAllocationRole,
   ServiceContract,
@@ -71,6 +73,13 @@ export interface EndAllocationInput {
   endReason: string;
 }
 
+export interface TransferAllocationInput {
+  allocationId: string;
+  toPostId: string;
+  transferDate: string;
+  reason: string;
+}
+
 /** Contrato com o resumo de cobertura dos postos ativos no dia. */
 export interface ContractListItem extends ServiceContract {
   customerName?: string;
@@ -85,6 +94,8 @@ export interface ContractDetails {
   versions: ServiceContractVersion[];
   posts: ServicePost[];
   allocations: PostAllocation[];
+  /** Férias e afastamentos não cancelados, em curso ou futuros, dos funcionários alocados. */
+  absences: EmployeeAbsence[];
   audit: ServiceContractAuditEvent[];
 }
 
@@ -223,26 +234,34 @@ export const getContracts = async (filters: ContractFilters = {}): Promise<Contr
   }
 
   const today = todayIso();
-  const [contractsResponse, postsResponse, allocationsResponse, customersResponse] = await Promise.all([
+  const [contractsResponse, postsResponse, allocationsResponse, customersResponse, absencesResponse] = await Promise.all([
     query,
     supabase.from('service_posts').select('id, contract_id, required_headcount, status').eq('company_id', companyId),
     supabase
       .from('service_post_allocations')
-      .select('post_id, allocation_role, start_date, end_date')
+      .select('post_id, employee_id, allocation_role, start_date, end_date')
       .eq('company_id', companyId)
       .or(`end_date.is.null,end_date.gte.${today}`),
     supabase.from('customers').select('id, full_name').eq('company_id', companyId),
+    supabase
+      .from('service_employee_absences')
+      .select('employee_id')
+      .eq('company_id', companyId)
+      .is('canceled_at', null)
+      .lte('start_date', today)
+      .gte('end_date', today),
   ]);
   if (contractsResponse.error) {
     throw new Error(contractErrorMessage(contractsResponse.error, 'Não foi possível carregar os contratos.'));
   }
-  if (postsResponse.error || allocationsResponse.error || customersResponse.error) {
+  if (postsResponse.error || allocationsResponse.error || customersResponse.error || absencesResponse.error) {
     throw new Error('Não foi possível carregar os postos dos contratos.');
   }
 
   const posts = (postsResponse.data || []) as { id: string; contract_id: string; required_headcount: number; status: ServicePostStatus }[];
-  const allocations = ((allocationsResponse.data || []) as { post_id: string; allocation_role: PostAllocationRole; start_date: string; end_date?: string | null }[])
-    .map((row) => ({ postId: row.post_id, allocationRole: row.allocation_role, startDate: row.start_date, endDate: row.end_date || undefined }));
+  const allocations = ((allocationsResponse.data || []) as { post_id: string; employee_id: string; allocation_role: PostAllocationRole; start_date: string; end_date?: string | null }[])
+    .map((row) => ({ postId: row.post_id, employeeId: row.employee_id, allocationRole: row.allocation_role, startDate: row.start_date, endDate: row.end_date || undefined }));
+  const absentEmployeeIds = new Set(((absencesResponse.data || []) as { employee_id: string }[]).map((row) => row.employee_id));
   const customerNames = nameMap(customersResponse.data as { id: string; full_name: string }[], 'full_name');
 
   const search = filters.search?.trim().toLocaleLowerCase('pt-BR');
@@ -251,7 +270,7 @@ export const getContracts = async (filters: ContractFilters = {}): Promise<Contr
       const contract = mapContract(row);
       const activePosts = posts.filter((post) => post.contract_id === row.id && post.status === 'active');
       const coverages = activePosts.map((post) =>
-        getPostCoverage({ id: post.id, requiredHeadcount: post.required_headcount, status: post.status }, allocations, today));
+        getPostCoverage({ id: post.id, requiredHeadcount: post.required_headcount, status: post.status }, allocations, today, absentEmployeeIds));
       return {
         ...contract,
         customerName: contract.customerId ? customerNames.get(contract.customerId) : undefined,
@@ -271,7 +290,8 @@ export const getContracts = async (filters: ContractFilters = {}): Promise<Contr
 
 export const getContractDetails = async (id: string): Promise<ContractDetails> => {
   const companyId = assertPeopleCompany();
-  const [contractResponse, versionsResponse, postsResponse, allocationsResponse, auditResponse, employeesResponse, profilesResponse, customersResponse] = await Promise.all([
+  const today = todayIso();
+  const [contractResponse, versionsResponse, postsResponse, allocationsResponse, auditResponse, employeesResponse, profilesResponse, customersResponse, absencesResponse] = await Promise.all([
     supabase.from('service_contracts').select(contractSelect).eq('id', id).eq('company_id', companyId).is('deleted_at', null).single(),
     supabase.from('service_contract_versions').select('id, contract_id, version_number, kind, title, signed_at, effective_start, effective_end, document_url, change_summary, validation_status, created_at').eq('contract_id', id).eq('company_id', companyId).order('version_number'),
     supabase.from('service_posts').select('id, contract_id, name, job_function, work_schedule, required_headcount, operational_manager_id, requirements, status, created_at').eq('contract_id', id).eq('company_id', companyId).order('name'),
@@ -280,12 +300,13 @@ export const getContractDetails = async (id: string): Promise<ContractDetails> =
     supabase.from('employees').select('id, full_name').eq('company_id', companyId),
     supabase.from('profiles').select('id, name').eq('company_id', companyId),
     supabase.from('customers').select('id, full_name').eq('company_id', companyId),
+    supabase.from('service_employee_absences').select('id, employee_id, kind, start_date, end_date, notes, created_at').eq('company_id', companyId).is('canceled_at', null).gte('end_date', today).order('start_date'),
   ]);
   if (contractResponse.error || !contractResponse.data) {
     throw new Error(contractErrorMessage(contractResponse.error, 'Contrato não encontrado.'));
   }
   if (versionsResponse.error || postsResponse.error || allocationsResponse.error || auditResponse.error
-    || employeesResponse.error || profilesResponse.error || customersResponse.error) {
+    || employeesResponse.error || profilesResponse.error || customersResponse.error || absencesResponse.error) {
     throw new Error('Não foi possível carregar os detalhes do contrato.');
   }
 
@@ -295,14 +316,28 @@ export const getContractDetails = async (id: string): Promise<ContractDetails> =
   const contract = mapContract(contractResponse.data as unknown as ContractRow);
   const posts = ((postsResponse.data || []) as unknown as PostRow[]).map((row) => mapPost(row, employeeNames));
   const postIds = new Set(posts.map((post) => post.id));
+  const allocations = ((allocationsResponse.data || []) as unknown as AllocationRow[])
+    .filter((row) => postIds.has(row.post_id))
+    .map((row) => mapAllocation(row, employeeNames));
+  const allocatedEmployeeIds = new Set(allocations.map((allocation) => allocation.employeeId));
 
   return {
     contract: { ...contract, customerName: contract.customerId ? customerNames.get(contract.customerId) : undefined },
     versions: ((versionsResponse.data || []) as unknown as VersionRow[]).map(mapVersion),
     posts,
-    allocations: ((allocationsResponse.data || []) as unknown as AllocationRow[])
-      .filter((row) => postIds.has(row.post_id))
-      .map((row) => mapAllocation(row, employeeNames)),
+    allocations,
+    absences: ((absencesResponse.data || []) as { id: string; employee_id: string; kind: AbsenceKind; start_date: string; end_date: string; notes?: string | null; created_at: string }[])
+      .filter((row) => allocatedEmployeeIds.has(row.employee_id))
+      .map((row) => ({
+        id: row.id,
+        employeeId: row.employee_id,
+        employeeName: employeeNames.get(row.employee_id) || 'Funcionário não disponível',
+        kind: row.kind,
+        startDate: row.start_date,
+        endDate: row.end_date,
+        notes: row.notes || undefined,
+        createdAt: row.created_at,
+      })),
     audit: ((auditResponse.data || []) as unknown as AuditRow[]).map((row) => ({
       id: row.id,
       contractId: row.contract_id || undefined,
@@ -394,4 +429,16 @@ export const endAllocation = async (input: EndAllocationInput): Promise<void> =>
     p_end_reason: input.endReason,
   });
   if (error) throw new Error(contractErrorMessage(error, 'Não foi possível encerrar a alocação.'));
+};
+
+export const transferAllocation = async (input: TransferAllocationInput): Promise<string> => {
+  assertPeopleCompany();
+  const { data, error } = await supabase.rpc('transfer_post_allocation', {
+    p_allocation_id: input.allocationId,
+    p_to_post_id: input.toPostId,
+    p_transfer_date: input.transferDate,
+    p_reason: input.reason.trim(),
+  });
+  if (error) throw new Error(contractErrorMessage(error, 'Não foi possível transferir o funcionário.'));
+  return String(data);
 };

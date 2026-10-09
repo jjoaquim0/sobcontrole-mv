@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ExternalLink, FileStack, History, LayoutList, Loader2, Pencil, Plus, UserMinus, UserPlus, Users, UserRoundSearch } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, ExternalLink, FileCheck2, FileStack, History, LayoutList, Loader2, Pencil, Plus, UserMinus, UserPlus, Users, UserRoundSearch } from 'lucide-react';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { useContractDetails } from '@/hooks/useContracts';
 import { useEmployees } from '@/hooks/usePeople';
+import { usePeopleDocs } from '@/hooks/usePeopleDocs';
+import { ABSENCE_KIND_LABELS, getAbsentEmployeeIds } from '@/pages/peopleDocs/peopleDocsDomain';
 import { FieldValue } from '@/pages/people/components/PeoplePrimitives';
 import { PostAllocation, ServiceContractVersion, ServicePost } from '@/types';
 import {
@@ -18,7 +20,7 @@ import {
   VALIDATION_STATUS_LABELS,
   VERSION_KIND_LABELS,
 } from './contractsDomain';
-import { AllocationModal, EndAllocationModal } from './components/AllocationModals';
+import { AllocationModal, EndAllocationModal, TransferAllocationModal } from './components/AllocationModals';
 import { ContractModal } from './components/ContractModal';
 import { cardClass, ContractStatusBadge, CoverageBadge, primaryButtonClass, secondaryButtonClass, ValidityBadge } from './components/ContractPrimitives';
 import { PostModal } from './components/PostModal';
@@ -48,30 +50,43 @@ export const ContractDetailPage = () => {
   const [postModal, setPostModal] = useState<{ open: boolean; post?: ServicePost }>({ open: false });
   const [allocatingPost, setAllocatingPost] = useState<ServicePost>();
   const [endingAllocation, setEndingAllocation] = useState<PostAllocation>();
+  const [transferringAllocation, setTransferringAllocation] = useState<PostAllocation>();
   const [showPastFor, setShowPastFor] = useState<Record<string, boolean>>({});
 
   const {
     details, saveContract, isSavingContract, saveVersion, isSavingVersion, savePost, isSavingPost,
-    allocateEmployee, isAllocating, endAllocation, isEndingAllocation,
+    allocateEmployee, isAllocating, endAllocation, isEndingAllocation, transferAllocation, isTransferring,
   } = useContractDetails(id);
+  const { overview: peopleDocs } = usePeopleDocs();
   const { employees } = useEmployees({});
   const today = todayIso();
 
   const data = details.data;
-  const coverageByPost = useMemo(() => new Map((data?.posts || []).map((post) => [post.id, getPostCoverage(post, data?.allocations || [], today)])), [data, today]);
+  const absentEmployeeIds = useMemo(() => getAbsentEmployeeIds(data?.absences || [], today), [data, today]);
+  const coverageByPost = useMemo(() => new Map((data?.posts || []).map((post) => [post.id, getPostCoverage(post, data?.allocations || [], today, absentEmployeeIds)])), [data, today, absentEmployeeIds]);
+  const transferDestinations = useMemo(() => {
+    const contractTitles = new Map((peopleDocs.data?.contracts || []).map((item) => [item.id, item.title]));
+    const source = peopleDocs.data?.posts || (data?.posts || []).map((post) => ({ ...post, contractId: post.contractId }));
+    return source
+      .filter((post) => post.status === 'active')
+      .map((post) => ({ id: post.id, name: post.name, jobFunction: post.jobFunction, contractTitle: contractTitles.get(post.contractId) || data?.contract.title || '' }));
+  }, [peopleDocs.data, data]);
 
   if (details.isLoading) return <div className="flex min-h-[50vh] items-center justify-center"><Loader2 className="h-7 w-7 animate-spin text-cyan-700" /></div>;
   if (details.isError || !data) {
     return <div role="alert" className="rounded-2xl border border-red-100 bg-white p-10 text-center dark:border-red-500/15 dark:bg-[#1a1d27]"><h1 className="font-bold text-gray-900 dark:text-white">Contrato não encontrado.</h1><button type="button" onClick={() => navigate('/contratos')} className="mt-4 text-sm font-semibold text-cyan-700">Voltar para contratos</button></div>;
   }
 
-  const { contract, versions, posts, allocations, audit } = data;
+  const { contract, versions, posts, allocations, absences, audit } = data;
+  const absenceOf = (employeeId: string) => absences.find((absence) => absence.employeeId === employeeId && absence.startDate <= today && absence.endDate >= today)
+    || absences.find((absence) => absence.employeeId === employeeId && absence.startDate > today);
   const validity = getContractValidity(contract, today);
   const activePosts = posts.filter((post) => post.status === 'active');
   const coverages = activePosts.map((post) => coverageByPost.get(post.id)!);
   const totals = {
     required: coverages.reduce((sum, coverage) => sum + coverage.required, 0),
     holders: coverages.reduce((sum, coverage) => sum + coverage.holders, 0),
+    absentHolders: coverages.reduce((sum, coverage) => sum + coverage.absentHolders, 0),
     substitutes: coverages.reduce((sum, coverage) => sum + coverage.substitutes, 0),
     uncovered: coverages.reduce((sum, coverage) => sum + coverage.uncovered, 0),
   };
@@ -115,7 +130,7 @@ export const ContractDetailPage = () => {
             <dl className="mt-4 grid grid-cols-2 gap-4">
               <FieldValue label="Postos ativos">{String(activePosts.length)}</FieldValue>
               <FieldValue label="Vagas previstas">{String(totals.required)}</FieldValue>
-              <FieldValue label="Titulares alocados">{String(totals.holders)}</FieldValue>
+              <FieldValue label="Titulares em serviço">{String(totals.holders)}{totals.absentHolders ? ` (+${totals.absentHolders} em férias/afastamento)` : ''}</FieldValue>
               <FieldValue label="Substitutos">{String(totals.substitutes)}</FieldValue>
             </dl>
             <p className={`mt-4 text-sm font-semibold ${totals.uncovered ? 'text-red-600 dark:text-red-400' : 'text-emerald-700 dark:text-emerald-300'}`}>{activePosts.length === 0 ? 'Nenhum posto ativo cadastrado.' : totals.uncovered ? `${totals.uncovered} vaga(s) descoberta(s)` : 'Todas as vagas cobertas'}</p>
@@ -143,7 +158,7 @@ export const ContractDetailPage = () => {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <CoverageBadge coverage={coverage} />
-                    <span className="text-xs text-gray-500">{coverage.holders}/{coverage.required} titular(es){coverage.substitutes ? ` · ${coverage.substitutes} substituto(s)` : ''}</span>
+                    <span className="text-xs text-gray-500">{coverage.holders}/{coverage.required} titular(es) em serviço{coverage.absentHolders ? ` · ${coverage.absentHolders} em férias/afastamento` : ''}{coverage.substitutes ? ` · ${coverage.substitutes} substituto(s)` : ''}</span>
                   </div>
                 </div>
                 {post.requirements && <p className="mt-3 rounded-xl bg-gray-50 px-3 py-2 text-xs text-gray-600 dark:bg-white/5 dark:text-gray-300"><span className="font-semibold">Requisitos:</span> {post.requirements}</p>}
@@ -154,8 +169,20 @@ export const ContractDetailPage = () => {
                     <ul className="mt-2 divide-y divide-gray-100 dark:divide-white/5">
                       {current.map((allocation) => (
                         <li key={allocation.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                          <span className="text-sm"><span className="font-semibold text-gray-900 dark:text-white">{allocation.employeeName}</span><span className="text-gray-500"> · {ALLOCATION_ROLE_LABELS[allocation.allocationRole]} · desde {formatDate(allocation.startDate)}</span>{allocation.endDate && <span className="text-amber-700 dark:text-amber-300"> · até {formatDate(allocation.endDate)}</span>}{allocation.startDate > today && <span className="text-blue-700 dark:text-blue-300"> · começa em breve</span>}</span>
-                          {!allocation.endDate && <button type="button" onClick={() => setEndingAllocation(allocation)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:hover:bg-red-500/10"><UserMinus className="h-3.5 w-3.5" />Encerrar</button>}
+                          <span className="text-sm"><span className="font-semibold text-gray-900 dark:text-white">{allocation.employeeName}</span><span className="text-gray-500"> · {ALLOCATION_ROLE_LABELS[allocation.allocationRole]} · desde {formatDate(allocation.startDate)}</span>{allocation.endDate && <span className="text-amber-700 dark:text-amber-300"> · até {formatDate(allocation.endDate)}</span>}{allocation.startDate > today && <span className="text-blue-700 dark:text-blue-300"> · começa em breve</span>}{(() => {
+                            const absence = absenceOf(allocation.employeeId);
+                            if (!absence) return null;
+                            return absence.startDate <= today
+                              ? <span className="font-semibold text-amber-700 dark:text-amber-300"> · {ABSENCE_KIND_LABELS[absence.kind]} até {formatDate(absence.endDate)}</span>
+                              : <span className="text-gray-500"> · {ABSENCE_KIND_LABELS[absence.kind]} a partir de {formatDate(absence.startDate)}</span>;
+                          })()}</span>
+                          {!allocation.endDate && (
+                            <span className="flex flex-wrap gap-1">
+                              {allocation.startDate < today && <button type="button" onClick={() => setTransferringAllocation(allocation)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-cyan-50 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:hover:bg-cyan-500/10"><ArrowRightLeft className="h-3.5 w-3.5" />Transferir</button>}
+                              <button type="button" onClick={() => navigate(`/documentacao?funcionario=${allocation.employeeId}`)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-cyan-50 hover:text-cyan-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:hover:bg-cyan-500/10"><FileCheck2 className="h-3.5 w-3.5" />Documentos</button>
+                              <button type="button" onClick={() => setEndingAllocation(allocation)} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-gray-500 hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:hover:bg-red-500/10"><UserMinus className="h-3.5 w-3.5" />Encerrar</button>
+                            </span>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -218,6 +245,7 @@ export const ContractDetailPage = () => {
       <VersionModal isOpen={versionModal.open} version={versionModal.version} hasOriginal={hasOriginal} isLoading={isSavingVersion} onClose={() => setVersionModal({ open: false })} onSave={async (input) => { await saveVersion({ input, versionId: versionModal.version?.id }); setVersionModal({ open: false }); }} />
       <PostModal isOpen={postModal.open} post={postModal.post} employees={employees} isLoading={isSavingPost} onClose={() => setPostModal({ open: false })} onSave={async (input) => { await savePost({ input, postId: postModal.post?.id }); setPostModal({ open: false }); }} />
       <AllocationModal isOpen={Boolean(allocatingPost)} post={allocatingPost} employees={employees} allocatedEmployeeIds={allocatingPost ? openAllocations(allocatingPost.id).map((allocation) => allocation.employeeId) : []} isLoading={isAllocating} onClose={() => setAllocatingPost(undefined)} onSave={async (input) => { await allocateEmployee(input); setAllocatingPost(undefined); }} />
+      <TransferAllocationModal allocation={transferringAllocation} destinations={transferDestinations} isLoading={isTransferring} onClose={() => setTransferringAllocation(undefined)} onSave={async (input) => { await transferAllocation(input); setTransferringAllocation(undefined); }} />
       <EndAllocationModal allocation={endingAllocation} isLoading={isEndingAllocation} onClose={() => setEndingAllocation(undefined)} onSave={async (input) => { await endAllocation(input); setEndingAllocation(undefined); }} />
     </div>
   );

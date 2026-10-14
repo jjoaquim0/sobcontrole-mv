@@ -71,7 +71,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   clearError: () => set({ error: null }),
 
   signIn: async (email, password) => {
-    set({ isLoading: true, error: null });
+    // Não liga isLoading aqui: o PublicRoute troca a tela por um spinner
+    // enquanto isLoading é true, o que desmontava o formulário e apagava o
+    // aviso de erro (clearError no mount). loadSession liga isLoading só
+    // depois que a autenticação deu certo.
+    set({ error: null });
     try {
       // 1. Autenticar no Supabase Auth
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -96,7 +100,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   },
 
   signUp: async (email, password, name, companyName, cnpj) => {
-    set({ isLoading: true, error: null });
+    // Mesmo motivo do signIn: não desmontar o formulário durante o envio.
+    set({ error: null });
     try {
       // 0. Limpar qualquer sessão anterior ativa
       await supabase.auth.signOut().catch(() => {});

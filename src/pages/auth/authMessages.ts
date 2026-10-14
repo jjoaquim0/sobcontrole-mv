@@ -13,6 +13,10 @@ export function getFriendlyAuthError(error: string | null, action: AuthAction): 
     return 'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.';
   }
 
+  if (action === 'login' && normalized.includes('invalid login credentials')) {
+    return 'E-mail ou senha inválidos. Confira os dados e tente novamente.';
+  }
+
   if (action === 'login') {
     return 'Não foi possível entrar. Confira seu e-mail e sua senha e tente novamente.';
   }

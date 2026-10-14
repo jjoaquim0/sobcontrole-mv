@@ -93,7 +93,7 @@ describe('Experiência de autenticação', () => {
     renderWithRouter(<Login />);
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Não foi possível entrar. Confira seu e-mail e sua senha e tente novamente.'
+      'E-mail ou senha inválidos. Confira os dados e tente novamente.'
     );
     expect(screen.queryByText(/provider response 400/i)).not.toBeInTheDocument();
   });
